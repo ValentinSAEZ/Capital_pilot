@@ -573,9 +573,8 @@ document.getElementById('create-family-btn').addEventListener('click', async () 
   document.getElementById('family-dialog-title').textContent = 'Créer une famille';
   const name = prompt('Nom de votre famille (ex: Famille Saez)');
   if (!name) return;
-  const { data, error } = await supabase.from('fp_families').insert({ name, created_by: state.user.id }).select().single();
+  const { data, error } = await supabase.rpc('create_family', { p_name: name });
   if (error || !data) { alert('Erreur : ' + (error?.message || 'inconnu')); return; }
-  await supabase.from('fp_profiles').update({ family_id: data.id }).eq('id', state.user.id);
   state.family = data;
   state.profile.family_id = data.id;
   state.familyMembers = [{ id: state.user.id, display_name: state.profile.display_name }];
@@ -620,9 +619,11 @@ document.getElementById('join-family-btn').addEventListener('click', () => {
 });
 
 async function joinFamilyByCode(code, userId) {
-  const { data: fam } = await supabase.from('fp_families').select('id, name').eq('invite_code', code).single();
-  if (!fam) { alert('Code famille invalide.'); return; }
-  await supabase.from('fp_profiles').update({ family_id: fam.id }).eq('id', userId);
+  const { data: fam, error } = await supabase.rpc('join_family_by_code', { p_code: code });
+  if (error || !fam) {
+    alert(error?.message || 'Code famille invalide.');
+    return;
+  }
   if (state.user?.id === userId) {
     state.family = fam;
     state.profile.family_id = fam.id;
