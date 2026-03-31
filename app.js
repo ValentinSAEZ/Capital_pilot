@@ -225,9 +225,21 @@ document.getElementById('save-profile-btn').addEventListener('click', async (e) 
   };
 
   try {
-    const { error } = await supabase.from('fp_profiles').upsert(updates, { onConflict: 'id' });
+    const { data, error } = await supabase.rpc('save_profile', {
+      p_display_name: updates.display_name,
+      p_monthly_income: updates.monthly_income,
+      p_monthly_expenses: updates.monthly_expenses,
+      p_comfort: updates.comfort,
+      p_investment_horizon_years: updates.investment_horizon_years,
+      p_emergency_months: updates.emergency_months,
+      p_target_savings_rate: updates.target_savings_rate,
+      p_project_label: updates.project_label,
+      p_project_type: updates.project_type,
+      p_project_target: updates.project_target,
+      p_project_years: updates.project_years,
+    });
     if (!error) {
-      Object.assign(state.profile, updates);
+      Object.assign(state.profile, data || updates);
       renderAll();
       btn.textContent = 'Enregistré !';
       setTimeout(() => {
@@ -240,6 +252,7 @@ document.getElementById('save-profile-btn').addEventListener('click', async (e) 
   } catch (err) {
     console.error('Erreur lors de la sauvegarde du profil:', err);
     btn.textContent = 'Erreur';
+    alert(`Impossible d'enregistrer votre situation : ${err?.message || 'erreur inconnue'}`);
     setTimeout(() => {
       btn.textContent = originalText;
       btn.disabled = false;

@@ -28,6 +28,7 @@ drop policy if exists "fp_families_insert_own" on public.fp_families;
 drop function if exists public.current_profile_family_id();
 drop function if exists public.create_family(text);
 drop function if exists public.join_family_by_code(text);
+drop function if exists public.save_profile(text, integer, integer, text, integer, integer, integer, text, text, integer, integer);
 
 create function public.current_profile_family_id()
 returns uuid
@@ -193,8 +194,80 @@ begin
 end;
 $$;
 
+create function public.save_profile(
+  p_display_name text,
+  p_monthly_income integer,
+  p_monthly_expenses integer,
+  p_comfort text,
+  p_investment_horizon_years integer,
+  p_emergency_months integer,
+  p_target_savings_rate integer,
+  p_project_label text,
+  p_project_type text,
+  p_project_target integer,
+  p_project_years integer
+)
+returns public.fp_profiles
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_profile public.fp_profiles;
+begin
+  if auth.uid() is null then
+    raise exception 'Authentication required';
+  end if;
+
+  insert into public.fp_profiles (
+    id,
+    display_name,
+    monthly_income,
+    monthly_expenses,
+    comfort,
+    investment_horizon_years,
+    emergency_months,
+    target_savings_rate,
+    project_label,
+    project_type,
+    project_target,
+    project_years
+  )
+  values (
+    auth.uid(),
+    nullif(trim(p_display_name), ''),
+    coalesce(p_monthly_income, 0),
+    coalesce(p_monthly_expenses, 0),
+    p_comfort,
+    coalesce(p_investment_horizon_years, 0),
+    coalesce(p_emergency_months, 0),
+    coalesce(p_target_savings_rate, 0),
+    nullif(trim(p_project_label), ''),
+    p_project_type,
+    coalesce(p_project_target, 0),
+    coalesce(p_project_years, 0)
+  )
+  on conflict (id) do update
+    set display_name = excluded.display_name,
+        monthly_income = excluded.monthly_income,
+        monthly_expenses = excluded.monthly_expenses,
+        comfort = excluded.comfort,
+        investment_horizon_years = excluded.investment_horizon_years,
+        emergency_months = excluded.emergency_months,
+        target_savings_rate = excluded.target_savings_rate,
+        project_label = excluded.project_label,
+        project_type = excluded.project_type,
+        project_target = excluded.project_target,
+        project_years = excluded.project_years
+  returning * into v_profile;
+
+  return v_profile;
+end;
+$$;
+
 grant execute on function public.current_profile_family_id() to authenticated;
 grant execute on function public.create_family(text) to authenticated;
 grant execute on function public.join_family_by_code(text) to authenticated;
+grant execute on function public.save_profile(text, integer, integer, text, integer, integer, integer, text, text, integer, integer) to authenticated;
 
 commit;
