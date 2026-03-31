@@ -18,10 +18,10 @@
       <aside class="sidebar">
         <div class="sidebar-brand">
           <div class="brand-mark" aria-hidden="true">CP</div>
-          <p class="eyebrow">Pilotage financier personnel</p>
+          <p class="eyebrow">Compagnon financier familial</p>
           <h1>Capital Pilot</h1>
           <p class="sidebar-copy">
-            Une couche parallele a ta banque pour organiser ta tresorerie, ton allocation et tes prochaines actions.
+            Une application claire et calme pour aider toute la famille a comprendre quoi faire de l'argent, sans jargon inutile.
           </p>
         </div>
 
@@ -32,14 +32,14 @@
         </nav>
 
         <section class="sidebar-panel" id="status-panel">
-          <p class="panel-kicker">Cadence</p>
+          <p class="panel-kicker">Vue rapide</p>
           <div id="status-content"></div>
         </section>
 
         <section class="sidebar-panel">
-          <p class="panel-kicker">Guardrail</p>
+          <p class="panel-kicker">Approche</p>
           <p class="microcopy">
-            Les suggestions sont indicatives et basees sur tes regles. Cette app n'est pas un conseil financier reglemente.
+            La lecture est volontairement simple, mais les calculs gardent une logique rigoureuse pour aider a prendre de meilleures decisions.
           </p>
         </section>
       </aside>
@@ -48,21 +48,21 @@
         <header class="workspace-header">
           <div class="workspace-intro">
             <p class="eyebrow">Assistant financier personnel</p>
-            <h2>Tu entres tes chiffres, Capital Pilot construit le plan</h2>
+            <h2>Un plan clair, humain et facile a suivre pour mieux gerer l'argent</h2>
             <p class="workspace-copy">
-              Donne simplement ton revenu, tes depenses et le projet que tu veux financer. L'application prepare toute seule la priorite du mois, la strategie et les actions concretes.
+              Donne simplement le revenu, les depenses et le projet. L'application transforme ces informations en plan du mois, sans te noyer dans des tableaux.
             </p>
+            <div class="welcome-note">
+              <strong>Comme un conseiller calme a la maison.</strong>
+              <span>On commence par comprendre la situation, puis on explique quoi faire maintenant avec des mots simples.</span>
+            </div>
           </div>
 
           <div class="workspace-control">
             <div class="hero-summary" id="hero-summary"></div>
             <div class="header-actions">
               <button class="ghost-button" id="install-button" type="button" hidden>Installer</button>
-              <button class="ghost-button" id="export-button" type="button">Exporter</button>
-              <button class="ghost-button" id="import-button" type="button">Importer</button>
-              <button class="ghost-button" id="reset-button" type="button">Reinitialiser la demo</button>
             </div>
-            <input id="import-input" type="file" accept="application/json" hidden>
           </div>
         </header>
 
@@ -72,7 +72,7 @@
               <p class="panel-kicker">Etape unique</p>
               <h3>Je renseigne ma situation, puis l'app fait le reste</h3>
             </div>
-            <p class="section-note">Cette partie suffit pour utiliser l'outil au quotidien.</p>
+            <p class="section-note">Cette partie suffit pour l'usage quotidien. Le detail complet reste plus bas si besoin.</p>
           </div>
           <div class="assistant-layout">
             <form class="assistant-form" id="assistant-form">
@@ -130,7 +130,7 @@
               <p class="panel-kicker">Plan automatique</p>
               <h3>Ce que tu dois faire ce mois-ci</h3>
             </div>
-            <p class="section-note">Le plan est recalculé automatiquement a chaque changement.</p>
+            <p class="section-note">Le plan est recalcule automatiquement et reste limite aux actions vraiment utiles.</p>
           </div>
           <div class="action-layout">
             <div class="action-plan" id="monthly-plan"></div>

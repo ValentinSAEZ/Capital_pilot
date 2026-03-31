@@ -220,10 +220,6 @@ const refs = {
   accountsBody: document.getElementById("accounts-body"),
   ritualContent: document.getElementById("ritual-content"),
   scenarioContent: document.getElementById("scenario-content"),
-  exportButton: document.getElementById("export-button"),
-  importButton: document.getElementById("import-button"),
-  importInput: document.getElementById("import-input"),
-  resetButton: document.getElementById("reset-button"),
   installButton: document.getElementById("install-button"),
   accountDialog: document.getElementById("account-dialog"),
   accountForm: document.getElementById("account-form"),
@@ -901,22 +897,22 @@ function renderAssistant(metrics, monthlyPlan) {
   refs.assistantSummary.innerHTML = `
     <div class="assistant-card-stack">
       <article class="assistant-card assistant-card-strong">
-        <p class="panel-kicker">Lecture immediate</p>
+        <p class="panel-kicker">En un coup d'oeil</p>
         <strong>${currency.format(metrics.monthlySurplus)}</strong>
-        <p class="microcopy">C'est ce qu'il te reste chaque mois apres depenses.</p>
+        <p class="microcopy">C'est la somme qui reste chaque mois une fois les depenses payees.</p>
       </article>
       <article class="assistant-card">
         <p class="panel-kicker">Projet compris</p>
         <strong>${primaryGoal.label}</strong>
-        <p class="microcopy">${currency.format(primaryGoal.current)} deja disponibles sur ${currency.format(primaryGoal.target)} a viser en ${number.format(primaryGoal.horizonMonths / 12)} ans.</p>
+        <p class="microcopy">${currency.format(primaryGoal.current)} deja de cote sur ${currency.format(primaryGoal.target)} a atteindre en ${number.format(primaryGoal.horizonMonths / 12)} ans.</p>
       </article>
       <article class="assistant-card">
-        <p class="panel-kicker">Strategie choisie</p>
+        <p class="panel-kicker">Style retenu</p>
         <strong>${strategyPresets[state.strategy.mode].label}</strong>
         <p class="microcopy">${assistantComfortLabel(state.assistant.comfort)}. ${strategyPresets[state.strategy.mode].description}</p>
       </article>
       <article class="assistant-card">
-        <p class="panel-kicker">Priorite automatique</p>
+        <p class="panel-kicker">Priorite du mois</p>
         <strong>${firstPlan ? firstPlan.label : "Reduire les depenses"}</strong>
         <p class="microcopy">${firstPlan ? `${currency.format(firstPlan.amount)} ce mois-ci vers ${firstPlan.destination}.` : "L'app recommande d'abord de recreer de la marge mensuelle."}</p>
       </article>
@@ -927,15 +923,15 @@ function renderAssistant(metrics, monthlyPlan) {
 function renderHeader(metrics) {
   refs.heroSummary.innerHTML = `
     <article class="hero-stat">
-      <small>Reste par mois</small>
+      <small>Budget libre</small>
       <strong>${currency.format(metrics.monthlySurplus)}</strong>
     </article>
     <article class="hero-stat">
-      <small>Epargne disponible</small>
+      <small>Epargne mise de cote</small>
       <strong>${currency.format(state.assistant.currentSavings)}</strong>
     </article>
     <article class="hero-stat">
-      <small>Projet</small>
+      <small>Projet principal</small>
       <strong>${state.assistant.projectLabel}</strong>
     </article>
   `;
@@ -949,8 +945,8 @@ function renderHeader(metrics) {
   refs.statusContent.innerHTML = `
     <div class="ritual-stack">
       ${statusSummary("Prochaine revue", formatDate(state.meta.nextReview))}
-      ${statusSummary("Runway", `${number.format(metrics.runwayMonths)} mois`)}
-      ${statusSummary("Risque", `${metrics.riskScore}/100`)}
+      ${statusSummary("Coussin actuel", `${number.format(metrics.runwayMonths)} mois`)}
+      ${statusSummary("Style", strategyPresets[state.strategy.mode].label)}
     </div>
   `;
 }
@@ -1005,7 +1001,7 @@ function renderKpis(metrics) {
 function renderPlan(plan, metrics) {
   const totalPlanned = plan.reduce((sum, item) => sum + item.amount, 0);
   if (!plan.length) {
-    refs.monthlyPlan.innerHTML = `<p class="empty-state">Aucun montant deployable ce mois-ci. Mets a jour le cashflow ou reduis les depenses.</p>`;
+    refs.monthlyPlan.innerHTML = `<p class="empty-state">Pour l'instant, il n'y a pas de somme a repartir. L'etape prioritaire est de recreer un peu de marge mensuelle.</p>`;
     return;
   }
 
@@ -1412,42 +1408,6 @@ function bindEvents() {
   document.addEventListener("input", handleLiveUpdate);
   document.addEventListener("change", handleLiveUpdate);
 
-  refs.exportButton.addEventListener("click", () => {
-    const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = "capital-pilot.json";
-    anchor.click();
-    URL.revokeObjectURL(url);
-  });
-
-  refs.importButton.addEventListener("click", () => refs.importInput.click());
-  refs.importInput.addEventListener("change", async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) {
-      return;
-    }
-
-    try {
-      const text = await file.text();
-      const parsed = JSON.parse(text);
-      state = loadImportedState(parsed);
-      saveState();
-      render();
-    } catch (error) {
-      window.alert("Import impossible: le fichier JSON est invalide.");
-    } finally {
-      refs.importInput.value = "";
-    }
-  });
-
-  refs.resetButton.addEventListener("click", () => {
-    state = clone(defaultState);
-    saveState();
-    render();
-  });
-
   refs.addAccountButton.addEventListener("click", () => openAccountDialog());
   refs.addGoalButton.addEventListener("click", () => openGoalDialog());
 
@@ -1539,20 +1499,6 @@ function bindEvents() {
     installPrompt = null;
     refs.installButton.hidden = true;
   });
-}
-
-function loadImportedState(parsed) {
-  return {
-    ...clone(defaultState),
-    ...parsed,
-    meta: { ...clone(defaultState.meta), ...(parsed.meta || {}) },
-    assistant: { ...clone(defaultState.assistant), ...(parsed.assistant || {}) },
-    profile: { ...clone(defaultState.profile), ...(parsed.profile || {}) },
-    strategy: { ...clone(defaultState.strategy), ...(parsed.strategy || {}) },
-    routines: { ...clone(defaultState.routines), ...(parsed.routines || {}) },
-    accounts: Array.isArray(parsed.accounts) ? parsed.accounts : clone(defaultState.accounts),
-    goals: Array.isArray(parsed.goals) ? parsed.goals : clone(defaultState.goals),
-  };
 }
 
 function initReveal() {

@@ -1,28 +1,28 @@
 :root {
-  --bg: #071216;
-  --bg-2: #0b171b;
-  --bg-3: #102127;
-  --surface: rgba(14, 27, 32, 0.78);
-  --surface-soft: rgba(17, 32, 38, 0.56);
-  --surface-strong: rgba(18, 33, 39, 0.9);
-  --line: rgba(178, 206, 202, 0.14);
-  --line-strong: rgba(178, 206, 202, 0.26);
-  --text: #edf3ee;
-  --text-soft: #c9d8d2;
-  --muted: #8fa59f;
-  --accent: #c6a36d;
-  --accent-2: #6abbb4;
+  --bg: #0c1417;
+  --bg-2: #122127;
+  --bg-3: #193239;
+  --surface: rgba(20, 34, 39, 0.76);
+  --surface-soft: rgba(22, 37, 42, 0.54);
+  --surface-strong: rgba(25, 42, 48, 0.92);
+  --line: rgba(207, 215, 210, 0.16);
+  --line-strong: rgba(207, 215, 210, 0.32);
+  --text: #f5f1e9;
+  --text-soft: #d7ddd7;
+  --muted: #aab4b0;
+  --accent: #d2af7b;
+  --accent-2: #7abfb7;
   --danger: #f18a7c;
   --ok: #7fc59a;
-  --cash: #6abbb4;
-  --bond: #81a1ff;
-  --equity: #c6a36d;
+  --cash: #7abfb7;
+  --bond: #8ba8ff;
+  --equity: #d2af7b;
   --real: #ce8798;
-  --shadow: 0 20px 50px rgba(0, 0, 0, 0.18);
-  --radius: 20px;
-  --radius-small: 14px;
-  --sidebar-width: 17.5rem;
-  --max-width: 1180px;
+  --shadow: 0 22px 60px rgba(0, 0, 0, 0.16);
+  --radius: 24px;
+  --radius-small: 16px;
+  --sidebar-width: 18.5rem;
+  --max-width: 1220px;
   --heading-font: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
   --body-font: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
 }
@@ -43,8 +43,9 @@ body {
   color: var(--text);
   font-family: var(--body-font);
   background:
-    radial-gradient(circle at top right, rgba(198, 163, 109, 0.14), transparent 25rem),
-    linear-gradient(180deg, #081216 0%, #0b1519 46%, #0e1a1f 100%);
+    radial-gradient(circle at top left, rgba(210, 175, 123, 0.2), transparent 26rem),
+    radial-gradient(circle at top right, rgba(122, 191, 183, 0.12), transparent 24rem),
+    linear-gradient(180deg, #0d1518 0%, #101a1e 48%, #152229 100%);
 }
 
 body::before {
@@ -52,9 +53,8 @@ body::before {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  background:
-    linear-gradient(90deg, transparent 0, rgba(255, 255, 255, 0.03) 50%, transparent 100%);
-  opacity: 0.22;
+  background: radial-gradient(circle at center, rgba(255, 255, 255, 0.045), transparent 62%);
+  opacity: 0.3;
 }
 
 a,
@@ -74,18 +74,21 @@ select {
   display: grid;
   grid-template-columns: minmax(15rem, var(--sidebar-width)) 1fr;
   min-height: 100vh;
+  gap: 1.2rem;
+  padding: 1.1rem;
 }
 
 .sidebar {
   position: sticky;
   top: 0;
   align-self: start;
-  height: 100vh;
-  padding: 2rem 1.4rem;
-  border-right: 1px solid var(--line);
+  height: calc(100vh - 2.2rem);
+  padding: 2rem 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: 2rem;
   background:
-    linear-gradient(180deg, rgba(7, 16, 20, 0.96), rgba(9, 20, 24, 0.88));
-  backdrop-filter: blur(18px);
+    linear-gradient(180deg, rgba(18, 29, 33, 0.95), rgba(21, 35, 40, 0.86));
+  backdrop-filter: blur(20px);
 }
 
 .sidebar-brand,
@@ -102,13 +105,13 @@ select {
   width: 2.5rem;
   height: 2.5rem;
   margin-bottom: 1.35rem;
-  border: 1px solid rgba(198, 163, 109, 0.3);
-  border-radius: 0.85rem;
+  border: 1px solid rgba(210, 175, 123, 0.34);
+  border-radius: 1rem;
   color: var(--accent);
   font-size: 0.86rem;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  background: linear-gradient(180deg, rgba(198, 163, 109, 0.08), rgba(198, 163, 109, 0.02));
+  background: linear-gradient(180deg, rgba(210, 175, 123, 0.12), rgba(210, 175, 123, 0.03));
 }
 
 .sidebar-brand h1,
@@ -122,8 +125,8 @@ select {
 }
 
 .sidebar-brand h1 {
-  font-size: clamp(2rem, 3vw, 2.8rem);
-  line-height: 0.98;
+  font-size: clamp(2.15rem, 3vw, 3rem);
+  line-height: 0.96;
 }
 
 .sidebar-copy,
@@ -157,17 +160,19 @@ select {
 }
 
 .sidebar-nav a {
-  padding: 0.72rem 0.3rem 0.72rem 0.95rem;
-  border-left: 1px solid transparent;
+  padding: 0.82rem 0.95rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
   color: var(--text-soft);
-  transition: color 180ms ease, border-color 180ms ease, transform 180ms ease;
+  transition: color 180ms ease, border-color 180ms ease, transform 180ms ease, background-color 180ms ease;
 }
 
 .sidebar-nav a:hover,
 .sidebar-nav a:focus-visible {
   color: var(--text);
-  border-left-color: var(--accent);
-  transform: translateX(0.2rem);
+  border-color: rgba(210, 175, 123, 0.28);
+  background: rgba(255, 255, 255, 0.03);
+  transform: translateX(0.15rem);
 }
 
 .sidebar-panel,
@@ -199,7 +204,7 @@ select {
   display: flex;
   flex-direction: column;
   width: min(calc(100vw - 3rem), var(--max-width));
-  padding: 2.1rem 0 6rem;
+  padding: 1.2rem 0 6rem;
   margin: 0 auto;
 }
 
@@ -207,11 +212,16 @@ select {
   order: 0;
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(18rem, 24rem);
-  gap: 1.4rem;
+  gap: 1.1rem;
   align-items: end;
-  padding: 0 0 1.8rem;
-  margin-bottom: 1.4rem;
-  border-bottom: 1px solid var(--line);
+  padding: 1.55rem;
+  margin-bottom: 1.2rem;
+  border: 1px solid var(--line);
+  border-radius: 2rem;
+  background:
+    linear-gradient(135deg, rgba(210, 175, 123, 0.12), transparent 38%),
+    linear-gradient(180deg, rgba(25, 39, 44, 0.92), rgba(18, 31, 36, 0.86));
+  box-shadow: var(--shadow);
 }
 
 .workspace-intro {
@@ -219,20 +229,41 @@ select {
 }
 
 .workspace-header h2 {
-  font-size: clamp(2.65rem, 4vw, 4.5rem);
+  font-size: clamp(2.9rem, 4vw, 4.9rem);
   line-height: 0.94;
-  max-width: 11ch;
+  max-width: 12ch;
 }
 
 .workspace-copy {
   max-width: 42rem;
-  margin-top: 0.9rem;
-  font-size: 1rem;
+  margin-top: 0.95rem;
+  font-size: 1.03rem;
 }
 
 .workspace-control {
   display: grid;
   gap: 0.9rem;
+}
+
+.welcome-note {
+  display: grid;
+  gap: 0.32rem;
+  max-width: 38rem;
+  margin-top: 1.1rem;
+  padding: 1rem 1.05rem;
+  border: 1px solid rgba(210, 175, 123, 0.2);
+  border-radius: var(--radius-small);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.welcome-note strong {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.welcome-note span {
+  color: var(--text-soft);
+  line-height: 1.55;
 }
 
 .hero-summary {
@@ -242,7 +273,7 @@ select {
 }
 
 .hero-stat {
-  padding: 1rem 1.05rem;
+  padding: 1.05rem 1.1rem;
   border-radius: var(--radius-small);
 }
 
@@ -265,14 +296,14 @@ select {
 
 .assistant-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(18rem, 24rem);
-  gap: 1rem;
+  grid-template-columns: minmax(0, 1.16fr) minmax(20rem, 25rem);
+  gap: 1.15rem;
 }
 
 .assistant-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.9rem;
+  gap: 1rem;
 }
 
 .assistant-form label {
@@ -284,11 +315,11 @@ select {
 
 .assistant-form input,
 .assistant-form select {
-  padding: 1rem;
+  padding: 1rem 1.05rem;
   border: 1px solid var(--line);
   border-radius: 1rem;
   color: var(--text);
-  background: rgba(255, 255, 255, 0.035);
+  background: rgba(255, 248, 240, 0.05);
 }
 
 .assistant-form input:focus-visible,
@@ -304,10 +335,10 @@ select {
 }
 
 .assistant-card {
-  padding: 1rem 1.05rem;
+  padding: 1.1rem 1.1rem;
   border: 1px solid var(--line);
   border-radius: var(--radius-small);
-  background: linear-gradient(180deg, rgba(17, 32, 38, 0.88), rgba(12, 24, 29, 0.76));
+  background: linear-gradient(180deg, rgba(25, 39, 45, 0.9), rgba(18, 30, 35, 0.78));
 }
 
 .assistant-card strong {
@@ -319,14 +350,15 @@ select {
 
 .assistant-card-strong {
   background:
-    linear-gradient(180deg, rgba(198, 163, 109, 0.14), rgba(198, 163, 109, 0.04)),
-    linear-gradient(180deg, rgba(17, 32, 38, 0.88), rgba(12, 24, 29, 0.76));
+    linear-gradient(180deg, rgba(210, 175, 123, 0.18), rgba(210, 175, 123, 0.05)),
+    linear-gradient(180deg, rgba(25, 39, 45, 0.9), rgba(18, 30, 35, 0.78));
 }
 
 .header-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.65rem;
+  justify-content: flex-end;
 }
 
 .ghost-button,
@@ -340,7 +372,7 @@ select {
 .ghost-button {
   color: var(--text);
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.025);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .primary-button {
@@ -357,7 +389,7 @@ select {
 }
 
 .section {
-  padding: 1.55rem;
+  padding: 1.7rem;
   margin-bottom: 1rem;
   opacity: 0;
   transform: translateY(1rem);
@@ -380,7 +412,7 @@ select {
 }
 
 .section-heading h3 {
-  font-size: clamp(1.8rem, 2vw, 2.35rem);
+  font-size: clamp(1.95rem, 2vw, 2.5rem);
   line-height: 1.02;
 }
 
@@ -432,7 +464,7 @@ select {
   padding: 1.2rem 1.15rem;
   border: 1px solid var(--line);
   border-radius: var(--radius-small);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015));
+  background: linear-gradient(180deg, rgba(255, 248, 240, 0.05), rgba(255, 255, 255, 0.02));
 }
 
 .kpi-item strong {
@@ -493,7 +525,7 @@ select {
 .plan-item:first-child,
 .whatif-card {
   background:
-    linear-gradient(180deg, rgba(198, 163, 109, 0.12), rgba(198, 163, 109, 0.04)),
+    linear-gradient(180deg, rgba(210, 175, 123, 0.14), rgba(210, 175, 123, 0.05)),
     linear-gradient(180deg, rgba(16, 31, 36, 0.88), rgba(12, 24, 29, 0.78));
 }
 
@@ -834,18 +866,18 @@ dialog::backdrop {
 @media (max-width: 1180px) {
   .app-shell {
     grid-template-columns: 1fr;
+    padding: 0.8rem;
   }
 
   .sidebar {
     position: relative;
     height: auto;
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
+    border: 1px solid var(--line);
   }
 
   .workspace {
     width: min(calc(100vw - 2rem), var(--max-width));
-    padding-top: 1.5rem;
+    padding-top: 0.6rem;
   }
 
   .workspace-header {
@@ -902,7 +934,7 @@ dialog::backdrop {
 
 @media (max-width: 540px) {
   .sidebar {
-    padding: 1.35rem 1rem;
+    padding: 1.3rem 1rem;
   }
 
   .workspace {
@@ -910,7 +942,7 @@ dialog::backdrop {
   }
 
   .section {
-    padding: 1.1rem;
+    padding: 1.2rem;
   }
 
   .header-actions {
