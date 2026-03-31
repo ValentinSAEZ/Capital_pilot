@@ -410,6 +410,93 @@ body.auth-active {
 .advice-content p { margin: 0 0 0.75rem; }
 .advice-content p:last-child { margin-bottom: 0; }
 .advice-placeholder { color: var(--muted); font-size: 0.95rem; }
+.advice-board {
+  display: grid;
+  gap: 1rem;
+}
+.advice-hero {
+  display: grid;
+  gap: 0.5rem;
+  padding: 1.1rem 1.2rem;
+  border: 1px solid rgba(122,191,183,0.18);
+  border-radius: var(--radius-md);
+  background: rgba(255,255,255,0.04);
+}
+.advice-hero h4,
+.advice-panel h4 {
+  margin: 0;
+  color: var(--text);
+  font-size: 1rem;
+}
+.advice-hero p,
+.advice-panel p {
+  margin: 0;
+}
+.advice-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+.advice-metric {
+  padding: 0.85rem 0.9rem;
+  border-radius: var(--radius-sm);
+  background: rgba(255,255,255,0.045);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.advice-metric-label {
+  display: block;
+  margin-bottom: 0.3rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.advice-metric-value {
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 600;
+}
+.advice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+.advice-panel {
+  display: grid;
+  gap: 0.7rem;
+  padding: 1rem 1.05rem;
+  border-radius: var(--radius-md);
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.advice-list {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+.advice-list li {
+  margin-bottom: 0.45rem;
+}
+.advice-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+.advice-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.4rem 0.65rem;
+  border-radius: 999px;
+  background: rgba(122,191,183,0.1);
+  border: 1px solid rgba(122,191,183,0.14);
+  color: var(--text);
+  font-size: 0.82rem;
+}
+.advice-note {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+.advice-remote {
+  display: grid;
+  gap: 0.55rem;
+}
 .advice-loading {
   display: flex;
   align-items: center;
@@ -737,6 +824,8 @@ dialog::backdrop { background: rgba(6,12,15,0.85); backdrop-filter: blur(12px); 
 @media (max-width: 860px) {
   .kpi-row { grid-template-columns: repeat(2, 1fr); }
   .market-ticker .ticker-item:nth-child(n+3) { display: none; }
+  .advice-metrics,
+  .advice-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 640px) {
@@ -749,4 +838,6 @@ dialog::backdrop { background: rgba(6,12,15,0.85); backdrop-filter: blur(12px); 
   .top-bar { gap: 0.6rem; padding: 0 0.8rem; }
   .brand-name { display: none; }
   .market-ticker .ticker-item:nth-child(n+2) { display: none; }
+  .advice-metrics,
+  .advice-grid { grid-template-columns: 1fr; }
 }

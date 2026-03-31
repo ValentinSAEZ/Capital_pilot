@@ -8,6 +8,14 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON);
 // ── FORMATTERS ────────────────────────────────
 const eur = (n) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
 const pct = (n) => `${(+n).toFixed(1)} %`;
+const roundTo50 = (n) => Math.max(0, Math.round((n || 0) / 50) * 50);
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+}[char]));
 
 // ── LABELS ────────────────────────────────────
 const bucketLabels = {
@@ -20,6 +28,14 @@ const bucketLabels = {
 };
 
 const priorityLabels = { critical: 'Critique', high: 'Haute', medium: 'Moyenne', low: 'Basse' };
+const comfortLabels = { safe: 'Prudent', balanced: 'Équilibré', dynamic: 'Dynamique' };
+const projectTypeLabels = {
+  property: 'Achat immobilier',
+  capitalisation: 'Capitalisation',
+  retirement: 'Retraite',
+  safety: 'Matelas de sécurité',
+  income: 'Complément de revenus',
+};
 
 // ── STATE ─────────────────────────────────────
 let state = { user: null, profile: {}, accounts: [], goals: [], family: null, familyMembers: [] };
@@ -62,6 +78,7 @@ function showApp() {
   if (marketTimer) clearInterval(marketTimer);
   fetchMarketData();
   marketTimer = setInterval(fetchMarketData, 5 * 60 * 1000);
+  refreshAdvice({ preferRemote: false }).catch(() => {});
 }
 
 // Tab switching in auth
@@ -197,6 +214,7 @@ function renderAll() {
   renderGoals();
   renderSidebar();
   renderFamily();
+  renderAdvicePlaceholder();
 }
 
 // ── EVENTS ────────────────────────────────────
@@ -241,6 +259,7 @@ document.getElementById('save-profile-btn').addEventListener('click', async (e) 
     if (!error) {
       Object.assign(state.profile, data || updates);
       renderAll();
+      await refreshAdvice({ preferRemote: false, loadingMessage: 'Analyse de votre plan en cours…' });
       btn.textContent = 'Enregistré !';
       setTimeout(() => {
         btn.textContent = originalText;
@@ -400,6 +419,7 @@ document.getElementById('account-form').addEventListener('submit', async (e) => 
   document.getElementById('account-dialog').close();
   renderAccounts();
   renderKPIs();
+  await refreshAdvice({ preferRemote: false });
 });
 
 document.getElementById('delete-account-btn').addEventListener('click', async () => {
@@ -410,6 +430,7 @@ document.getElementById('delete-account-btn').addEventListener('click', async ()
   document.getElementById('account-dialog').close();
   renderAccounts();
   renderKPIs();
+  await refreshAdvice({ preferRemote: false });
 });
 
 // ── GOALS ─────────────────────────────────────
@@ -495,6 +516,7 @@ document.getElementById('goal-form').addEventListener('submit', async (e) => {
   document.getElementById('goal-dialog').close();
   renderGoals();
   renderKPIs();
+  await refreshAdvice({ preferRemote: false });
 });
 
 document.getElementById('delete-goal-btn').addEventListener('click', async () => {
@@ -505,33 +527,361 @@ document.getElementById('delete-goal-btn').addEventListener('click', async () =>
   document.getElementById('goal-dialog').close();
   renderGoals();
   renderKPIs();
+  await refreshAdvice({ preferRemote: false });
 });
 
 // ── AI ADVICE ─────────────────────────────────
 document.getElementById('get-advice-btn').addEventListener('click', async () => {
+  await refreshAdvice({ preferRemote: true, loadingMessage: 'Le compagnon financier prépare votre plan…' });
+});
+
+function renderAdvicePlaceholder() {
+  const content = document.getElementById('advice-content');
+  const p = state.profile || {};
+  const hasProfileData = p.monthly_income || p.monthly_expenses || p.project_label || p.project_target;
+  if (hasProfileData) return;
+  content.innerHTML = `
+    <div class="advice-placeholder">
+      <p>Indiquez votre revenu, vos dépenses et votre projet principal, puis cliquez sur <strong>Enregistrer</strong>. Le plan d'action se mettra à jour automatiquement.</p>
+    </div>
+  `;
+}
+
+async function refreshAdvice({ preferRemote = false, loadingMessage = 'Analyse en cours…' } = {}) {
   const btn = document.getElementById('get-advice-btn');
   const content = document.getElementById('advice-content');
-  btn.disabled = true;
-  content.innerHTML = `<div class="advice-loading"><div class="spinner"></div>Claude analyse votre situation…</div>`;
+  const snapshot = buildAdviceSnapshot();
 
-  const { data, error } = await supabase.functions.invoke('finance-advisor', {
-    body: {
-      profile: state.profile,
-      accounts: state.accounts,
-      goals: state.goals,
-    },
-  });
-
-  btn.disabled = false;
-  if (error || !data?.advice) {
-    content.innerHTML = `<div class="advice-placeholder" style="color:var(--danger)">Erreur : ${error?.message || 'Impossible de joindre le conseiller IA. Vérifiez que la clé API Anthropic est configurée dans Supabase.'}</div>`;
+  if (!snapshot.isReady) {
+    renderAdvicePlaceholder();
+    document.getElementById('advice-timestamp').textContent = '';
     return;
   }
 
-  content.innerHTML = data.advice;
-  const now = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-  document.getElementById('advice-timestamp').textContent = `Mis à jour à ${now}`;
-});
+  btn.disabled = true;
+  content.innerHTML = `<div class="advice-loading"><div class="spinner"></div>${loadingMessage}</div>`;
+
+  const localPlan = buildLocalAdvice(snapshot);
+  const remoteAdvice = preferRemote ? await getRemoteAdvice(snapshot, localPlan) : null;
+
+  content.innerHTML = buildAdviceHtml(snapshot, localPlan, remoteAdvice);
+  document.getElementById('advice-timestamp').textContent =
+    `Mis à jour à ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+  btn.disabled = false;
+}
+
+function buildAdviceSnapshot() {
+  const profile = state.profile || {};
+  const income = Number(profile.monthly_income) || 0;
+  const expenses = Number(profile.monthly_expenses) || 0;
+  const surplus = income - expenses;
+  const savingsRate = income > 0 ? (surplus / income) * 100 : 0;
+  const positiveAccounts = state.accounts.filter((account) => account.balance > 0);
+  const debts = state.accounts.filter((account) => account.balance < 0 || account.bucket === 'debt');
+  const assets = positiveAccounts.reduce((sum, account) => sum + account.balance, 0);
+  const debtBalance = debts.reduce((sum, account) => sum + Math.abs(account.balance), 0);
+  const liquidAssets = positiveAccounts
+    .filter((account) => ['cash', 'savings'].includes(account.bucket))
+    .reduce((sum, account) => sum + account.balance, 0);
+  const emergencyTarget = (Number(profile.emergency_months) || 0) * expenses;
+  const emergencyGap = Math.max(0, emergencyTarget - liquidAssets);
+  const bucketTotals = positiveAccounts.reduce((acc, account) => {
+    acc[account.bucket] = (acc[account.bucket] || 0) + account.balance;
+    return acc;
+  }, {});
+  const goals = buildAnalyzableGoals(profile);
+  const targetMix = getTargetMix(profile.comfort, Number(profile.investment_horizon_years) || 0);
+  const totalForMix = positiveAccounts
+    .filter((account) => ['cash', 'savings', 'equities', 'bonds', 'real_assets'].includes(account.bucket))
+    .reduce((sum, account) => sum + account.balance, 0);
+  const currentMix = Object.fromEntries(
+    Object.keys(targetMix).map((bucket) => [bucket, totalForMix > 0 ? ((bucketTotals[bucket] || 0) / totalForMix) * 100 : 0]),
+  );
+
+  return {
+    profile,
+    income,
+    expenses,
+    surplus,
+    savingsRate,
+    assets,
+    debtBalance,
+    netWorth: assets - debtBalance,
+    liquidAssets,
+    emergencyTarget,
+    emergencyGap,
+    totalForMix,
+    bucketTotals,
+    currentMix,
+    targetMix,
+    averageDebtRate: debts.length ? debts.reduce((sum, account) => sum + (Number(account.rate) || 0), 0) / debts.length : 0,
+    goals,
+    isReady: income > 0 || expenses > 0 || goals.length > 0,
+  };
+}
+
+function buildAnalyzableGoals(profile) {
+  if (state.goals.length) {
+    return [...state.goals]
+      .map((goal) => ({
+        ...goal,
+        target: Number(goal.target) || 0,
+        current: Number(goal.current) || 0,
+        monthly_contribution: Number(goal.monthly_contribution) || 0,
+        horizon_months: Number(goal.horizon_months) || 0,
+      }))
+      .filter((goal) => goal.target > 0);
+  }
+
+  if ((Number(profile.project_target) || 0) > 0 || profile.project_label) {
+    return [{
+      id: 'profile-project',
+      label: profile.project_label || projectTypeLabels[profile.project_type] || 'Projet principal',
+      target: Number(profile.project_target) || 0,
+      current: 0,
+      monthly_contribution: 0,
+      horizon_months: (Number(profile.project_years) || 0) * 12,
+      priority: 'high',
+      fromProfile: true,
+    }].filter((goal) => goal.target > 0);
+  }
+
+  return [];
+}
+
+function getTargetMix(comfort = 'balanced', horizonYears = 0) {
+  const baseMix = {
+    safe: { cash: 15, savings: 30, equities: 20, bonds: 30, real_assets: 5 },
+    balanced: { cash: 10, savings: 20, equities: 45, bonds: 20, real_assets: 5 },
+    dynamic: { cash: 5, savings: 10, equities: 65, bonds: 15, real_assets: 5 },
+  }[comfort || 'balanced'];
+
+  if (horizonYears && horizonYears <= 3) {
+    return {
+      cash: baseMix.cash + 5,
+      savings: baseMix.savings + 10,
+      equities: Math.max(10, baseMix.equities - 15),
+      bonds: baseMix.bonds + 5,
+      real_assets: baseMix.real_assets,
+    };
+  }
+
+  if (horizonYears && horizonYears >= 12) {
+    return {
+      cash: Math.max(3, baseMix.cash - 2),
+      savings: Math.max(5, baseMix.savings - 5),
+      equities: baseMix.equities + 7,
+      bonds: Math.max(10, baseMix.bonds - 3),
+      real_assets: baseMix.real_assets + 3,
+    };
+  }
+
+  return baseMix;
+}
+
+function buildLocalAdvice(snapshot) {
+  const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
+  const goals = snapshot.goals
+    .map((goal) => {
+      const remaining = Math.max(0, goal.target - goal.current);
+      const requiredMonthly = goal.horizon_months > 0 ? remaining / goal.horizon_months : 0;
+      const projectedMonths = goal.monthly_contribution > 0 ? Math.ceil(remaining / goal.monthly_contribution) : null;
+      return {
+        ...goal,
+        remaining,
+        requiredMonthly,
+        projectedMonths,
+        completionPct: goal.target > 0 ? Math.min(100, (goal.current / goal.target) * 100) : 0,
+      };
+    })
+    .sort((a, b) => (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2));
+
+  const primaryGoal = goals[0] || null;
+  let remainingCapacity = Math.max(0, snapshot.surplus);
+  const monthlyPlan = [];
+
+  if (snapshot.emergencyGap > 0 && remainingCapacity > 0) {
+    const reserveContribution = Math.min(snapshot.emergencyGap, roundTo50(Math.max(100, remainingCapacity * 0.4)));
+    if (reserveContribution > 0) {
+      monthlyPlan.push({
+        title: 'Renforcer votre matelas de sécurité',
+        amount: reserveContribution,
+        note: `Objectif ${eur(snapshot.emergencyTarget)}. Il manque encore ${eur(snapshot.emergencyGap)}.`,
+      });
+      remainingCapacity -= reserveContribution;
+    }
+  }
+
+  if (snapshot.debtBalance > 0 && remainingCapacity > 0 && (snapshot.averageDebtRate >= 4 || snapshot.emergencyGap === 0)) {
+    const debtContribution = Math.min(snapshot.debtBalance, roundTo50(Math.max(50, remainingCapacity * 0.35)));
+    if (debtContribution > 0) {
+      monthlyPlan.push({
+        title: 'Rembourser la dette prioritaire',
+        amount: debtContribution,
+        note: `Dette totale estimée ${eur(snapshot.debtBalance)}.`,
+      });
+      remainingCapacity -= debtContribution;
+    }
+  }
+
+  if (primaryGoal && primaryGoal.remaining > 0 && remainingCapacity > 0) {
+    const monthlyNeed = primaryGoal.requiredMonthly > 0 ? primaryGoal.requiredMonthly : remainingCapacity;
+    const goalContribution = Math.min(primaryGoal.remaining, roundTo50(Math.max(monthlyNeed, remainingCapacity * 0.45)));
+    if (goalContribution > 0) {
+      monthlyPlan.push({
+        title: `Financer "${primaryGoal.label}"`,
+        amount: goalContribution,
+        note: primaryGoal.requiredMonthly > 0
+          ? `Pour tenir l'échéance, il faut viser ${eur(primaryGoal.requiredMonthly)} par mois.`
+          : 'Ajoutez une contribution mensuelle pour obtenir une date cible réaliste.',
+      });
+      remainingCapacity -= goalContribution;
+    }
+  }
+
+  if (remainingCapacity > 0) {
+    const targetInvestBucket = Object.entries(snapshot.targetMix)
+      .filter(([bucket]) => ['equities', 'bonds', 'savings'].includes(bucket))
+      .sort((a, b) => ((b[1] - (snapshot.currentMix[b[0]] || 0)) - (a[1] - (snapshot.currentMix[a[0]] || 0))))[0];
+    monthlyPlan.push({
+      title: `Investir régulièrement vers ${bucketLabels[targetInvestBucket?.[0] || 'equities']}`,
+      amount: remainingCapacity,
+      note: `Allocation cohérente avec votre profil ${comfortLabels[snapshot.profile.comfort] || 'Équilibré'}.`,
+    });
+  }
+
+  const actionItems = [];
+  if (snapshot.surplus <= 0) {
+    actionItems.push(`Réduire les dépenses ou augmenter le revenu d'au moins ${eur(Math.abs(snapshot.surplus) + 150)} pour retrouver une épargne positive.`);
+  } else {
+    actionItems.push(`Préserver votre capacité mensuelle de ${eur(snapshot.surplus)} avant d'augmenter le niveau de risque.`);
+  }
+  if (snapshot.emergencyGap > 0) {
+    actionItems.push(`Compléter la réserve de sécurité: il manque ${eur(snapshot.emergencyGap)} pour couvrir ${Number(snapshot.profile.emergency_months) || 0} mois de dépenses.`);
+  }
+  if (snapshot.debtBalance > 0 && snapshot.averageDebtRate >= 4) {
+    actionItems.push('Traiter les dettes coûteuses avant de surpondérer les placements risqués.');
+  }
+  if (primaryGoal) {
+    if (primaryGoal.requiredMonthly > 0 && primaryGoal.monthly_contribution < primaryGoal.requiredMonthly) {
+      actionItems.push(`Le projet "${primaryGoal.label}" demande environ ${eur(primaryGoal.requiredMonthly)} par mois. Votre effort actuel est insuffisant.`);
+    } else if (primaryGoal.requiredMonthly > 0) {
+      actionItems.push(`Le projet "${primaryGoal.label}" est atteignable si vous maintenez au moins ${eur(primaryGoal.requiredMonthly)} par mois.`);
+    } else {
+      actionItems.push(`Définissez une échéance ou une contribution pour "${primaryGoal.label}" afin d'obtenir un plan encore plus précis.`);
+    }
+  }
+
+  const allocationInsights = Object.entries(snapshot.targetMix)
+    .map(([bucket, target]) => ({
+      bucket,
+      target,
+      current: snapshot.currentMix[bucket] || 0,
+      gap: target - (snapshot.currentMix[bucket] || 0),
+    }))
+    .sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap));
+
+  return {
+    headline: snapshot.surplus > 0
+      ? `Vous pouvez piloter environ ${eur(snapshot.surplus)} par mois.`
+      : `Votre budget est en tension de ${eur(Math.abs(snapshot.surplus))} par mois.`,
+    summary: snapshot.netWorth > 0
+      ? `Patrimoine net estimé à ${eur(snapshot.netWorth)}, dont ${eur(snapshot.liquidAssets)} immédiatement mobilisables.`
+      : `Patrimoine net estimé à ${eur(snapshot.netWorth)}. La priorité est de stabiliser la base budgétaire.`,
+    goals,
+    primaryGoal,
+    monthlyPlan,
+    actionItems,
+    allocationInsights,
+  };
+}
+
+function buildAdviceHtml(snapshot, plan, remoteAdvice) {
+  const metrics = [
+    { label: 'Capacité mensuelle', value: eur(snapshot.surplus) },
+    { label: 'Patrimoine net', value: eur(snapshot.netWorth) },
+    { label: 'Taux d’épargne', value: pct(snapshot.savingsRate) },
+    { label: 'Projet prioritaire', value: plan.primaryGoal ? escapeHtml(plan.primaryGoal.label) : 'À définir' },
+  ];
+
+  const monthlyPlanHtml = plan.monthlyPlan.length
+    ? `<ol class="advice-list">${plan.monthlyPlan.map((item) => `<li><strong>${escapeHtml(item.title)}</strong> · <span class="amount">${eur(item.amount)}</span><br><span class="advice-note">${escapeHtml(item.note)}</span></li>`).join('')}</ol>`
+    : `<p>Pas de capacité disponible à répartir ce mois-ci. Le levier prioritaire est budgétaire.</p>`;
+
+  const goalHtml = plan.goals.length
+    ? `<div class="advice-chip-row">${plan.goals.map((goal) => {
+      const timing = goal.requiredMonthly > 0 ? `Besoin ${eur(goal.requiredMonthly)}/mois` : 'Échéance à préciser';
+      return `<span class="advice-chip">${escapeHtml(goal.label)} · ${goal.completionPct.toFixed(0)} % · ${escapeHtml(timing)}</span>`;
+    }).join('')}</div>`
+    : '<p>Ajoutez un objectif détaillé pour obtenir un plan plus fin.</p>';
+
+  const allocationHtml = snapshot.totalForMix > 0
+    ? `<ul class="advice-list">${plan.allocationInsights.slice(0, 3).map((item) => `
+      <li><strong>${bucketLabels[item.bucket] || item.bucket}</strong> · actuel ${pct(item.current)} · cible ${pct(item.target)}${Math.abs(item.gap) >= 3 ? ` · écart ${item.gap > 0 ? '+' : ''}${pct(item.gap)}` : ''}</li>
+    `).join('')}</ul>`
+    : '<p>Ajoutez vos comptes et placements pour obtenir une allocation vraiment personnalisée.</p>';
+
+  const remoteHtml = remoteAdvice
+    ? `<div class="advice-panel"><h4>Lecture IA complémentaire</h4><div class="advice-remote">${remoteAdvice}</div></div>`
+    : '';
+
+  return `
+    <div class="advice-board">
+      <div class="advice-hero">
+        <h4>${escapeHtml(plan.headline)}</h4>
+        <p>${escapeHtml(plan.summary)}</p>
+      </div>
+      <div class="advice-metrics">
+        ${metrics.map((metric) => `
+          <div class="advice-metric">
+            <span class="advice-metric-label">${escapeHtml(metric.label)}</span>
+            <span class="advice-metric-value">${metric.value}</span>
+          </div>
+        `).join('')}
+      </div>
+      <div class="advice-grid">
+        <div class="advice-panel">
+          <h4>Plan du mois</h4>
+          ${monthlyPlanHtml}
+        </div>
+        <div class="advice-panel">
+          <h4>Points de vigilance</h4>
+          <ul class="advice-list">
+            ${plan.actionItems.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}
+          </ul>
+        </div>
+        <div class="advice-panel">
+          <h4>Objectifs</h4>
+          ${goalHtml}
+        </div>
+        <div class="advice-panel">
+          <h4>Allocation suggérée</h4>
+          <p>Profil ${escapeHtml(comfortLabels[snapshot.profile.comfort] || 'Équilibré')} · horizon ${Number(snapshot.profile.investment_horizon_years) || 0} an(s).</p>
+          ${allocationHtml}
+        </div>
+      </div>
+      ${remoteHtml}
+    </div>
+  `;
+}
+
+async function getRemoteAdvice(snapshot, plan) {
+  try {
+    const { data, error } = await supabase.functions.invoke('finance-advisor', {
+      body: {
+        profile: state.profile,
+        accounts: state.accounts,
+        goals: state.goals,
+        snapshot,
+        plan,
+      },
+    });
+    if (error || !data?.advice) return null;
+    return data.advice;
+  } catch {
+    return null;
+  }
+}
 
 // ── MARKET DATA ───────────────────────────────
 async function fetchMarketData() {
