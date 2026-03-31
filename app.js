@@ -220,7 +220,6 @@ const refs = {
   accountsBody: document.getElementById("accounts-body"),
   ritualContent: document.getElementById("ritual-content"),
   scenarioContent: document.getElementById("scenario-content"),
-  installButton: document.getElementById("install-button"),
   accountDialog: document.getElementById("account-dialog"),
   accountForm: document.getElementById("account-form"),
   goalDialog: document.getElementById("goal-dialog"),
@@ -230,8 +229,6 @@ const refs = {
 };
 
 let state = loadState();
-let installPrompt = null;
-
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
@@ -1485,20 +1482,6 @@ function bindEvents() {
     }
   });
 
-  window.addEventListener("beforeinstallprompt", (event) => {
-    event.preventDefault();
-    installPrompt = event;
-    refs.installButton.hidden = false;
-  });
-
-  refs.installButton.addEventListener("click", async () => {
-    if (!installPrompt) {
-      return;
-    }
-    await installPrompt.prompt();
-    installPrompt = null;
-    refs.installButton.hidden = true;
-  });
 }
 
 function initReveal() {
