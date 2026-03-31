@@ -17,52 +17,49 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!anthropicKey) {
-      return json({ error: "ANTHROPIC_API_KEY is missing" }, 500);
+    const openaiKey = Deno.env.get("OPENAI_API_KEY");
+    if (!openaiKey) {
+      return json({ error: "OPENAI_API_KEY is missing" }, 500);
     }
 
     const body = await req.json() as Payload;
     const prompt = buildPrompt(body);
-    const model = Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-4-20250514";
+    const model = Deno.env.get("OPENAI_MODEL") || "gpt-4o";
 
-    const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
+    const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-api-key": anthropicKey,
-        "anthropic-version": "2023-06-01",
+        "Authorization": `Bearer ${openaiKey}`,
       },
       body: JSON.stringify({
         model,
         max_tokens: 1200,
-        system: [
-          "You are Capital Pilot, a French family finance copilot.",
-          "Return concise, direct HTML only.",
-          "Write in French.",
-          "Give practical allocation, budgeting and investing guidance.",
-          "Use sections with <p>, <strong>, and <ul><li> only.",
-          "Do not mention being an AI model.",
-          "Do not give legal or regulated guarantees.",
-          "Always adapt advice to the numbers provided and the user's goals.",
-        ].join(" "),
         messages: [
+          {
+            role: "system",
+            content: [
+              "Tu es Capital Pilot, un conseiller financier familial.",
+              "Réponds uniquement en HTML concis et direct.",
+              "Écris en français.",
+              "Donne des conseils pratiques sur l'allocation, le budget et l'investissement.",
+              "Utilise uniquement <p>, <strong> et <ul><li>.",
+              "Ne mentionne pas que tu es une IA.",
+              "Ne donne pas de garanties légales ou réglementées.",
+              "Adapte toujours les conseils aux chiffres et objectifs fournis.",
+            ].join(" "),
+          },
           { role: "user", content: prompt },
         ],
       }),
     });
 
-    const anthropicData = await anthropicRes.json();
-    if (!anthropicRes.ok) {
-      return json({ error: anthropicData?.error?.message || "Anthropic request failed" }, 500);
+    const openaiData = await openaiRes.json();
+    if (!openaiRes.ok) {
+      return json({ error: openaiData?.error?.message || "OpenAI request failed" }, 500);
     }
 
-    const advice = Array.isArray(anthropicData?.content)
-      ? anthropicData.content
-          .filter((item: { type?: string }) => item?.type === "text")
-          .map((item: { text?: string }) => item.text || "")
-          .join("\n")
-      : "";
+    const advice = openaiData?.choices?.[0]?.message?.content || "";
 
     return json({ advice });
   } catch (error) {
