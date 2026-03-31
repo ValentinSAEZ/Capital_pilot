@@ -26,14 +26,9 @@
         </div>
 
         <nav class="sidebar-nav" aria-label="Navigation principale">
-          <a href="#cashflow">Cashflow</a>
-          <a href="#accounts">Comptes</a>
-          <a href="#strategy">Strategie</a>
-          <a href="#actions">Conseils</a>
-          <a href="#overview">Vue globale</a>
-          <a href="#allocation">Allocation</a>
-          <a href="#goals">Objectifs</a>
-          <a href="#ritual">Routine</a>
+          <a href="#assistant">Assistant</a>
+          <a href="#actions">Plan du mois</a>
+          <a href="#details">Detail complet</a>
         </nav>
 
         <section class="sidebar-panel" id="status-panel">
@@ -52,10 +47,10 @@
       <main class="workspace">
         <header class="workspace-header">
           <div class="workspace-intro">
-            <p class="eyebrow">Dashboard financier adaptatif</p>
-            <h2>Decider quoi faire de ton argent, chaque semaine</h2>
+            <p class="eyebrow">Assistant financier personnel</p>
+            <h2>Tu entres tes chiffres, Capital Pilot construit le plan</h2>
             <p class="workspace-copy">
-              L'app calcule ton buffer, compare ton allocation a ta cible et transforme ta strategie en plan d'action concret.
+              Donne simplement ton revenu, tes depenses et le projet que tu veux financer. L'application prepare toute seule la priorite du mois, la strategie et les actions concretes.
             </p>
           </div>
 
@@ -71,24 +66,71 @@
           </div>
         </header>
 
-        <section class="section overview" id="overview" data-reveal>
+        <section class="section assistant" id="assistant" data-reveal>
           <div class="section-heading">
             <div>
-              <p class="panel-kicker">Synthese</p>
-              <h3>Les chiffres a regarder avant toute decision</h3>
+              <p class="panel-kicker">Etape unique</p>
+              <h3>Je renseigne ma situation, puis l'app fait le reste</h3>
             </div>
-            <div class="section-meta" id="overview-meta"></div>
+            <p class="section-note">Cette partie suffit pour utiliser l'outil au quotidien.</p>
           </div>
-          <div class="kpi-grid" id="kpi-grid"></div>
+          <div class="assistant-layout">
+            <form class="assistant-form" id="assistant-form">
+              <label>
+                Mon revenu mensuel
+                <input type="number" name="assistant.monthlyIncome" min="0" step="50">
+              </label>
+              <label>
+                Mes depenses mensuelles
+                <input type="number" name="assistant.monthlyExpenses" min="0" step="50">
+              </label>
+              <label>
+                Mon epargne disponible
+                <input type="number" name="assistant.currentSavings" min="0" step="100">
+              </label>
+              <label>
+                Mon projet
+                <input type="text" name="assistant.projectLabel" placeholder="Achat immobilier, retraite, voyage...">
+              </label>
+              <label>
+                Type de projet
+                <select name="assistant.projectType">
+                  <option value="property">Acheter un bien</option>
+                  <option value="capitalisation">Faire grandir mon argent</option>
+                  <option value="retirement">Preparer ma retraite</option>
+                  <option value="safety">Construire un matelas de securite</option>
+                  <option value="income">Chercher plus de revenu</option>
+                </select>
+              </label>
+              <label>
+                Montant du projet
+                <input type="number" name="assistant.projectTarget" min="0" step="500">
+              </label>
+              <label>
+                Dans combien d'annees
+                <input type="number" name="assistant.projectYears" min="1" max="40" step="1">
+              </label>
+              <label>
+                Mon style
+                <select name="assistant.comfort">
+                  <option value="safe">Prudent</option>
+                  <option value="balanced">Equilibre</option>
+                  <option value="dynamic">Dynamique</option>
+                </select>
+              </label>
+            </form>
+
+            <div class="assistant-summary" id="assistant-summary"></div>
+          </div>
         </section>
 
         <section class="section actions" id="actions" data-reveal>
           <div class="section-heading">
             <div>
-              <p class="panel-kicker">Etape 3</p>
-              <h3>Les conseils a executer apres choix de strategie</h3>
+              <p class="panel-kicker">Plan automatique</p>
+              <h3>Ce que tu dois faire ce mois-ci</h3>
             </div>
-            <p class="section-note">Actions classees par impact et urgence.</p>
+            <p class="section-note">Le plan est recalculé automatiquement a chaque changement.</p>
           </div>
           <div class="action-layout">
             <div class="action-plan" id="monthly-plan"></div>
@@ -96,183 +138,198 @@
           </div>
         </section>
 
-        <section class="section cashflow" id="cashflow" data-reveal>
-          <div class="section-heading">
-            <div>
-              <p class="panel-kicker">Etape 1</p>
-              <h3>Renseigne d'abord tes revenus et depenses</h3>
-            </div>
-            <p class="section-note">C'est l'entree principale du produit. Mets ces chiffres a jour avant le reste.</p>
-          </div>
-          <div class="two-column">
-            <form class="form-grid" id="cashflow-form">
-              <label>
-                Revenu mensuel net
-                <input type="number" name="profile.monthlyIncome" min="0" step="50">
-              </label>
-              <label>
-                Charges fixes
-                <input type="number" name="profile.fixedCosts" min="0" step="50">
-              </label>
-              <label>
-                Depenses variables
-                <input type="number" name="profile.variableCosts" min="0" step="50">
-              </label>
-              <label>
-                Remboursements de dettes
-                <input type="number" name="profile.debtPayments" min="0" step="10">
-              </label>
-              <label>
-                Epargne cible (% du revenu)
-                <input type="number" name="profile.targetSavingsRate" min="0" max="80" step="1">
-              </label>
-              <label>
-                Montant mensuel a deployer
-                <input type="number" name="strategy.monthlyInvestableCash" min="0" step="50">
-              </label>
-            </form>
+        <details class="section advanced-disclosure" id="details">
+          <summary>Voir le detail complet de l'analyse</summary>
+          <div class="advanced-content">
+            <section class="section nested-section overview" id="overview" data-reveal>
+              <div class="section-heading">
+                <div>
+                  <p class="panel-kicker">Synthese</p>
+                  <h3>Les chiffres a regarder avant toute decision</h3>
+                </div>
+                <div class="section-meta" id="overview-meta"></div>
+              </div>
+              <div class="kpi-grid" id="kpi-grid"></div>
+            </section>
 
-            <div class="waterfall" id="cashflow-breakdown"></div>
-          </div>
-        </section>
+            <section class="section nested-section cashflow" id="cashflow" data-reveal>
+              <div class="section-heading">
+                <div>
+                  <p class="panel-kicker">Cashflow detaille</p>
+                  <h3>Lecture mensuelle des revenus et depenses</h3>
+                </div>
+                <p class="section-note">Disponible si tu veux verifier les calculs derriere l'assistant.</p>
+              </div>
+              <div class="two-column">
+                <form class="form-grid" id="cashflow-form">
+                  <label>
+                    Revenu mensuel net
+                    <input type="number" name="profile.monthlyIncome" min="0" step="50">
+                  </label>
+                  <label>
+                    Charges fixes
+                    <input type="number" name="profile.fixedCosts" min="0" step="50">
+                  </label>
+                  <label>
+                    Depenses variables
+                    <input type="number" name="profile.variableCosts" min="0" step="50">
+                  </label>
+                  <label>
+                    Remboursements de dettes
+                    <input type="number" name="profile.debtPayments" min="0" step="10">
+                  </label>
+                  <label>
+                    Epargne cible (% du revenu)
+                    <input type="number" name="profile.targetSavingsRate" min="0" max="80" step="1">
+                  </label>
+                  <label>
+                    Montant mensuel a deployer
+                    <input type="number" name="strategy.monthlyInvestableCash" min="0" step="50">
+                  </label>
+                </form>
 
-        <section class="section allocation" id="allocation" data-reveal>
-          <div class="section-heading">
-            <div>
-              <p class="panel-kicker">Allocation</p>
-              <h3>Ou ton capital est place et ou il devrait aller</h3>
-            </div>
-            <p class="section-note">La cible bouge selon la strategie choisie.</p>
-          </div>
-          <div class="allocation-layout">
-            <div id="allocation-chart"></div>
-            <div id="allocation-drifts"></div>
-          </div>
-        </section>
+                <div class="waterfall" id="cashflow-breakdown"></div>
+              </div>
+            </section>
 
-        <section class="section goals" id="goals" data-reveal>
-          <div class="section-heading">
-            <div>
-              <p class="panel-kicker">Objectifs</p>
-              <h3>Objectifs suivis par horizon et contribution mensuelle</h3>
-            </div>
-            <div class="header-actions">
-              <button class="ghost-button" id="add-goal-button" type="button">Ajouter un objectif</button>
-            </div>
-          </div>
-          <div id="goals-list"></div>
-        </section>
+            <section class="section nested-section strategy" id="strategy" data-reveal>
+              <div class="section-heading">
+                <div>
+                  <p class="panel-kicker">Strategie detaillee</p>
+                  <h3>Regles internes de pilotage</h3>
+                </div>
+                <p class="section-note">Cette couche est remplie automatiquement a partir de ton assistant simple.</p>
+              </div>
+              <div class="two-column">
+                <form class="form-grid strategy-form" id="strategy-form">
+                  <label>
+                    Mode de gestion
+                    <select name="strategy.mode">
+                      <option value="security">Securite</option>
+                      <option value="balanced">Equilibre</option>
+                      <option value="growth">Croissance</option>
+                      <option value="income">Revenus</option>
+                      <option value="property">Projet immobilier</option>
+                    </select>
+                  </label>
+                  <label>
+                    Objectif principal
+                    <select name="strategy.objective">
+                      <option value="capitalisation">Capitalisation</option>
+                      <option value="income">Revenu complementaire</option>
+                      <option value="property">Apport immobilier</option>
+                      <option value="retirement">Retraite</option>
+                      <option value="stability">Stabilite</option>
+                    </select>
+                  </label>
+                  <label>
+                    Horizon d'investissement (ans)
+                    <input type="number" name="profile.investmentHorizonYears" min="1" max="40" step="1">
+                  </label>
+                  <label>
+                    Matelas de securite (mois)
+                    <input type="number" name="profile.emergencyMonths" min="1" max="24" step="1">
+                  </label>
+                  <label>
+                    Exposition actions max (%)
+                    <input type="number" name="strategy.maxEquity" min="10" max="90" step="1">
+                  </label>
+                  <label>
+                    Bande de reequilibrage (%)
+                    <input type="number" name="strategy.rebalanceBand" min="1" max="20" step="1">
+                  </label>
+                  <label>
+                    Politique de dette
+                    <select name="strategy.debtRule">
+                      <option value="minimum">Minimum uniquement</option>
+                      <option value="hybrid">Hybrid reserve + dette</option>
+                      <option value="avalanche">Avalanche</option>
+                    </select>
+                  </label>
+                  <label>
+                    Projet immobilier dans
+                    <input type="number" name="strategy.housingProjectYears" min="1" max="20" step="1">
+                  </label>
+                </form>
+                <div class="strategy-insights" id="strategy-insights"></div>
+              </div>
+            </section>
 
-        <section class="section strategy" id="strategy" data-reveal>
-          <div class="section-heading">
-            <div>
-              <p class="panel-kicker">Etape 2</p>
-              <h3>Choisis ensuite la strategie qui doit piloter les arbitrages</h3>
-            </div>
-            <p class="section-note">Modifie ton profil de risque et l'objectif principal.</p>
-          </div>
-          <div class="two-column">
-            <form class="form-grid strategy-form" id="strategy-form">
-              <label>
-                Mode de gestion
-                <select name="strategy.mode">
-                  <option value="security">Securite</option>
-                  <option value="balanced">Equilibre</option>
-                  <option value="growth">Croissance</option>
-                  <option value="income">Revenus</option>
-                  <option value="property">Projet immobilier</option>
-                </select>
-              </label>
-              <label>
-                Objectif principal
-                <select name="strategy.objective">
-                  <option value="capitalisation">Capitalisation</option>
-                  <option value="income">Revenu complementaire</option>
-                  <option value="property">Apport immobilier</option>
-                  <option value="retirement">Retraite</option>
-                  <option value="stability">Stabilite</option>
-                </select>
-              </label>
-              <label>
-                Horizon d'investissement (ans)
-                <input type="number" name="profile.investmentHorizonYears" min="1" max="40" step="1">
-              </label>
-              <label>
-                Matelas de securite (mois)
-                <input type="number" name="profile.emergencyMonths" min="1" max="24" step="1">
-              </label>
-              <label>
-                Exposition actions max (%)
-                <input type="number" name="strategy.maxEquity" min="10" max="90" step="1">
-              </label>
-              <label>
-                Bande de reequilibrage (%)
-                <input type="number" name="strategy.rebalanceBand" min="1" max="20" step="1">
-              </label>
-              <label>
-                Politique de dette
-                <select name="strategy.debtRule">
-                  <option value="minimum">Minimum uniquement</option>
-                  <option value="hybrid">Hybrid reserve + dette</option>
-                  <option value="avalanche">Avalanche</option>
-                </select>
-              </label>
-              <label>
-                Projet immobilier dans
-                <input type="number" name="strategy.housingProjectYears" min="1" max="20" step="1">
-              </label>
-            </form>
-            <div class="strategy-insights" id="strategy-insights"></div>
-          </div>
-        </section>
+            <section class="section nested-section accounts" id="accounts" data-reveal>
+              <div class="section-heading">
+                <div>
+                  <p class="panel-kicker">Patrimoine detaille</p>
+                  <h3>Comptes et poches de placement</h3>
+                </div>
+                <div class="header-actions">
+                  <button class="ghost-button" id="add-account-button" type="button">Ajouter un compte</button>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Compte</th>
+                      <th>Type</th>
+                      <th>Balance</th>
+                      <th>Rendement / taux</th>
+                      <th>Support</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="accounts-body"></tbody>
+                </table>
+              </div>
+            </section>
 
-        <section class="section accounts" id="accounts" data-reveal>
-          <div class="section-heading">
-            <div>
-              <p class="panel-kicker">Etape 1 bis</p>
-              <h3>Ajoute ensuite les comptes et placements qui composent le patrimoine</h3>
-            </div>
-            <div class="header-actions">
-              <button class="ghost-button" id="add-account-button" type="button">Ajouter un compte</button>
-            </div>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Compte</th>
-                  <th>Type</th>
-                  <th>Balance</th>
-                  <th>Rendement / taux</th>
-                  <th>Support</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody id="accounts-body"></tbody>
-            </table>
-          </div>
-        </section>
+            <section class="section nested-section allocation" id="allocation" data-reveal>
+              <div class="section-heading">
+                <div>
+                  <p class="panel-kicker">Allocation</p>
+                  <h3>Ou ton capital est place et ou il devrait aller</h3>
+                </div>
+                <p class="section-note">La cible bouge selon la strategie choisie.</p>
+              </div>
+              <div class="allocation-layout">
+                <div id="allocation-chart"></div>
+                <div id="allocation-drifts"></div>
+              </div>
+            </section>
 
-        <section class="section ritual" id="ritual" data-reveal>
-          <div class="section-heading">
-            <div>
-              <p class="panel-kicker">Routine</p>
-              <h3>Le suivi regulier sur mobile et desktop</h3>
-            </div>
-            <p class="section-note">Un rituel simple pour garder le systeme a jour.</p>
+            <section class="section nested-section goals" id="goals" data-reveal>
+              <div class="section-heading">
+                <div>
+                  <p class="panel-kicker">Objectifs</p>
+                  <h3>Objectifs suivis par horizon et contribution mensuelle</h3>
+                </div>
+                <div class="header-actions">
+                  <button class="ghost-button" id="add-goal-button" type="button">Ajouter un objectif</button>
+                </div>
+              </div>
+              <div id="goals-list"></div>
+            </section>
+
+            <section class="section nested-section ritual" id="ritual" data-reveal>
+              <div class="section-heading">
+                <div>
+                  <p class="panel-kicker">Routine</p>
+                  <h3>Le suivi regulier sur mobile et desktop</h3>
+                </div>
+                <p class="section-note">Un rituel simple pour garder le systeme a jour.</p>
+              </div>
+              <div class="two-column">
+                <div id="ritual-content"></div>
+                <div id="scenario-content"></div>
+              </div>
+            </section>
           </div>
-          <div class="two-column">
-            <div id="ritual-content"></div>
-            <div id="scenario-content"></div>
-          </div>
-        </section>
+        </details>
       </main>
 
       <nav class="mobile-nav" aria-label="Navigation mobile">
-        <a href="#overview">Vue</a>
-        <a href="#actions">Actions</a>
-        <a href="#allocation">Allocation</a>
-        <a href="#strategy">Strategie</a>
+        <a href="#assistant">Assistant</a>
+        <a href="#actions">Plan</a>
+        <a href="#details">Detail</a>
       </nav>
     </div>
 

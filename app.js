@@ -57,6 +57,16 @@ const defaultState = {
     lastReview: "2026-03-31",
     nextReview: "2026-04-05",
   },
+  assistant: {
+    monthlyIncome: 4200,
+    monthlyExpenses: 2410,
+    currentSavings: 18000,
+    projectLabel: "Acheter ma residence principale",
+    projectType: "property",
+    projectTarget: 50000,
+    projectYears: 4,
+    comfort: "balanced",
+  },
   profile: {
     monthlyIncome: 4200,
     fixedCosts: 1650,
@@ -192,6 +202,8 @@ const longDate = new Intl.DateTimeFormat("fr-FR", {
 });
 
 const refs = {
+  assistantForm: document.getElementById("assistant-form"),
+  assistantSummary: document.getElementById("assistant-summary"),
   kpiGrid: document.getElementById("kpi-grid"),
   overviewMeta: document.getElementById("overview-meta"),
   statusContent: document.getElementById("status-content"),
@@ -240,6 +252,7 @@ function loadState() {
       ...clone(defaultState),
       ...parsed,
       meta: { ...clone(defaultState.meta), ...(parsed.meta || {}) },
+      assistant: { ...clone(defaultState.assistant), ...(parsed.assistant || {}) },
       profile: { ...clone(defaultState.profile), ...(parsed.profile || {}) },
       strategy: { ...clone(defaultState.strategy), ...(parsed.strategy || {}) },
       routines: { ...clone(defaultState.routines), ...(parsed.routines || {}) },
@@ -253,6 +266,199 @@ function loadState() {
 
 function saveState() {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function assistantProjectTypeLabel(value) {
+  const labels = {
+    property: "Acheter un bien",
+    capitalisation: "Faire grandir mon argent",
+    retirement: "Preparer ma retraite",
+    safety: "Construire un matelas de securite",
+    income: "Chercher plus de revenu",
+  };
+  return labels[value] || value;
+}
+
+function assistantComfortLabel(value) {
+  const labels = {
+    safe: "Prudent",
+    balanced: "Equilibre",
+    dynamic: "Dynamique",
+  };
+  return labels[value] || value;
+}
+
+function buildAutoAccounts(totalSavings, targetAllocation, reserveTarget, projectType) {
+  const safeSavings = Math.max(0, totalSavings);
+  if (!safeSavings) {
+    return [
+      {
+        id: "acc-auto-cash",
+        label: "Tresorerie principale",
+        bucket: "cash",
+        balance: 0,
+        rate: 2.5,
+        wrapper: "Poche automatique",
+      },
+    ];
+  }
+
+  let cashBalance = Math.min(
+    safeSavings,
+    Math.max(reserveTarget, safeSavings * ((targetAllocation.cash || 0) / 100)),
+  );
+
+  if (projectType === "property" || projectType === "safety") {
+    cashBalance = Math.min(safeSavings, Math.max(cashBalance, safeSavings * 0.6));
+  }
+
+  const remaining = Math.max(0, safeSavings - cashBalance);
+  const otherWeights = normalizeWeights({
+    bonds: targetAllocation.bonds || 0,
+    equities: targetAllocation.equities || 0,
+    real_assets: targetAllocation.real_assets || 0,
+  });
+  const split = distributeAmount(round(remaining), otherWeights);
+
+  return [
+    {
+      id: "acc-auto-cash",
+      label: projectType === "property" ? "Poche projet + securite" : "Tresorerie principale",
+      bucket: "cash",
+      balance: cashBalance,
+      rate: 2.5,
+      wrapper: "Poche automatique",
+    },
+    {
+      id: "acc-auto-bonds",
+      label: "Poche prudente",
+      bucket: "bonds",
+      balance: split.bonds || 0,
+      rate: 3.2,
+      wrapper: "Support prudent",
+    },
+    {
+      id: "acc-auto-equities",
+      label: "Poche croissance",
+      bucket: "equities",
+      balance: split.equities || 0,
+      rate: 6.8,
+      wrapper: "ETF / diversification",
+    },
+    {
+      id: "acc-auto-real",
+      label: "Poche projet long terme",
+      bucket: "real_assets",
+      balance: split.real_assets || 0,
+      rate: 4.5,
+      wrapper: "Actifs reels",
+    },
+  ].filter((account) => account.balance > 0 || account.bucket === "cash");
+}
+
+function applyAssistantModel() {
+  const assistant = state.assistant || clone(defaultState.assistant);
+  const income = Math.max(0, Number(assistant.monthlyIncome) || 0);
+  const expenses = Math.max(0, Number(assistant.monthlyExpenses) || 0);
+  const savings = Math.max(0, Number(assistant.currentSavings) || 0);
+  const projectYears = Math.max(1, Number(assistant.projectYears) || 1);
+  const projectTarget = Math.max(0, Number(assistant.projectTarget) || 0);
+  const projectType = assistant.projectType || "capitalisation";
+  const comfort = assistant.comfort || "balanced";
+  const comfortSettings = {
+    safe: { mode: "security", maxEquity: 35, emergencyMonths: 6, rebalanceBand: 4 },
+    balanced: { mode: "balanced", maxEquity: 60, emergencyMonths: 5, rebalanceBand: 5 },
+    dynamic: { mode: "growth", maxEquity: 80, emergencyMonths: 4, rebalanceBand: 7 },
+  }[comfort] || { mode: "balanced", maxEquity: 60, emergencyMonths: 5, rebalanceBand: 5 };
+
+  const objectiveByProject = {
+    property: "property",
+    capitalisation: "capitalisation",
+    retirement: "retirement",
+    safety: "stability",
+    income: "income",
+  };
+
+  const monthlySurplus = Math.max(0, income - expenses);
+  const fixedCosts = round(expenses * 0.68);
+  const variableCosts = Math.max(0, expenses - fixedCosts);
+
+  state.profile.monthlyIncome = income;
+  state.profile.fixedCosts = fixedCosts;
+  state.profile.variableCosts = variableCosts;
+  state.profile.debtPayments = 0;
+  state.profile.targetSavingsRate = income > 0 ? clamp(round((monthlySurplus / income) * 100), 5, 45) : 0;
+  state.profile.emergencyMonths = comfortSettings.emergencyMonths + (projectType === "safety" ? 1 : 0);
+  state.profile.investmentHorizonYears = projectType === "retirement" ? Math.max(12, projectYears) : projectYears;
+
+  state.strategy.mode = projectType === "property" ? "property" : comfortSettings.mode;
+  state.strategy.objective = objectiveByProject[projectType] || "capitalisation";
+  state.strategy.monthlyInvestableCash = round(monthlySurplus);
+  state.strategy.maxEquity = comfortSettings.maxEquity;
+  state.strategy.rebalanceBand = comfortSettings.rebalanceBand;
+  state.strategy.debtRule = "minimum";
+  state.strategy.housingProjectYears = projectType === "property" ? projectYears : 8;
+
+  const reserveTarget = expenses * state.profile.emergencyMonths;
+  const targetAllocation = getTargetAllocation(state);
+  state.accounts = buildAutoAccounts(savings, targetAllocation, reserveTarget, projectType);
+
+  const monthlyReserveContribution =
+    savings >= reserveTarget ? round(monthlySurplus * 0.1) : round(monthlySurplus * 0.35);
+  const monthlyProjectContribution = round(
+    monthlySurplus * (projectType === "retirement" ? 0.5 : projectType === "property" ? 0.55 : 0.4),
+  );
+  const monthlyLongTermContribution = Math.max(
+    0,
+    round(monthlySurplus - monthlyReserveContribution - monthlyProjectContribution),
+  );
+
+  const reserveCurrent = Math.min(savings, reserveTarget);
+  const primaryGoalCurrent = Math.min(
+    projectTarget,
+    projectType === "safety" ? reserveCurrent : Math.max(0, savings - reserveCurrent),
+  );
+
+  const primaryGoalLabel = assistant.projectLabel?.trim() || assistantProjectTypeLabel(projectType);
+
+  state.goals = [
+    {
+      id: "goal-security",
+      label: "Matelas de securite",
+      target: reserveTarget,
+      current: reserveCurrent,
+      monthlyContribution: Math.max(0, monthlyReserveContribution),
+      horizonMonths: Math.max(1, state.profile.emergencyMonths * 6),
+      priority: "critical",
+    },
+    {
+      id: "goal-main",
+      label: primaryGoalLabel,
+      target: projectTarget || reserveTarget,
+      current: primaryGoalCurrent,
+      monthlyContribution: Math.max(0, monthlyProjectContribution),
+      horizonMonths: Math.max(1, projectYears * 12),
+      priority: "high",
+    },
+  ];
+
+  if (projectType !== "retirement") {
+    state.goals.push({
+      id: "goal-long-term",
+      label: "Capital long terme",
+      target: Math.max(60000, savings + monthlyLongTermContribution * 120),
+      current: Math.max(0, savings - primaryGoalCurrent),
+      monthlyContribution: Math.max(0, monthlyLongTermContribution),
+      horizonMonths: 120,
+      priority: "medium",
+    });
+  }
+
+  state.routines.alerts = [
+    `Verifier que ${currency.format(Math.max(0, monthlySurplus))} restent bien disponibles chaque mois`,
+    `Comparer la poche projet a l'objectif ${primaryGoalLabel.toLowerCase()}`,
+    "Controler une fois par semaine que les depenses n'ont pas derive",
+  ];
 }
 
 function uid(prefix) {
@@ -548,18 +754,18 @@ function generateRecommendations(currentState, metrics, plan) {
   if (metrics.monthlySurplus <= 0) {
     recommendations.push({
       priority: "critical",
-      title: "Retablir un surplus mensuel positif",
-      detail: `Tu depenses ${currency.format(Math.abs(metrics.monthlySurplus))} de plus que ton revenu chaque mois.`,
-      action: `Coupe au moins ${currency.format(Math.abs(metrics.monthlySurplus) + 150)} dans les depenses variables avant d'augmenter l'investissement.`,
+      title: "Depenser un peu moins chaque mois",
+      detail: `En ce moment, il manque ${currency.format(Math.abs(metrics.monthlySurplus))} pour finir le mois sans stress.`,
+      action: `Avant d'investir, retrouve au moins ${currency.format(Math.abs(metrics.monthlySurplus) + 150)} de marge.`,
     });
   } else {
     if (metrics.reserveGap > 0) {
       const topUp = Math.min(round(metrics.monthlySurplus * 0.45), metrics.reserveGap);
       recommendations.push({
         priority: "critical",
-        title: "Finir le fonds de securite",
-        detail: `Il manque ${currency.format(metrics.reserveGap)} pour atteindre ${number.format(currentState.profile.emergencyMonths)} mois de depenses.`,
-        action: `Ajoute ${currency.format(topUp)} par mois sur la poche liquide jusqu'au seuil.`,
+        title: "Completer d'abord la reserve de securite",
+        detail: `Il manque ${currency.format(metrics.reserveGap)} pour avoir ${number.format(currentState.profile.emergencyMonths)} mois de depenses de cote.`,
+        action: `Mets ${currency.format(topUp)} par mois sur la poche securite jusqu'au bon niveau.`,
       });
     }
 
@@ -570,9 +776,9 @@ function generateRecommendations(currentState, metrics, plan) {
     if (expensiveDebt && currentState.strategy.debtRule !== "minimum") {
       recommendations.push({
         priority: "high",
-        title: "Accelerer le desendettement couteux",
+        title: "Remettre un peu plus sur la dette chere",
         detail: `${expensiveDebt.label} coute ${number.format(Number(expensiveDebt.rate))} % par an.`,
-        action: `Alloue un extra sur cette dette tant que le taux reste superieur a ton rendement sans risque.`,
+        action: "Tant que ce taux reste eleve, mieux vaut la ralentir avant de prendre plus de risque.",
       });
     }
 
@@ -581,9 +787,9 @@ function generateRecommendations(currentState, metrics, plan) {
         Object.entries(metrics.allocationGaps).sort((left, right) => right[1] - left[1])[0] || [];
       recommendations.push({
         priority: "high",
-        title: "Deploye le cash qui dort",
-        detail: `${currency.format(metrics.idleCash)} depassent ton matelas de securite cible.`,
-        action: `Redirige en priorite vers ${bucketLabels[largestPositiveGap[0] || "equities"].toLowerCase()} via ${getDestinationLabel(largestPositiveGap[0] || "equities", currentState)}.`,
+        title: "Utiliser l'argent qui dort",
+        detail: `${currency.format(metrics.idleCash)} restent au-dessus du matelas de securite cible.`,
+        action: `Dirige cette somme en priorite vers ${bucketLabels[largestPositiveGap[0] || "equities"].toLowerCase()} via ${getDestinationLabel(largestPositiveGap[0] || "equities", currentState)}.`,
       });
     }
 
@@ -594,11 +800,11 @@ function generateRecommendations(currentState, metrics, plan) {
       const direction = strongestGap[1] > 0 ? "sous-ponderee" : "sur-ponderee";
       recommendations.push({
         priority: "medium",
-        title: "Reequilibrer l'allocation",
+        title: "Remettre le portefeuille dans l'axe",
         detail: `La poche ${bucketLabels[strongestGap[0]].toLowerCase()} est ${direction} de ${number.format(Math.abs(strongestGap[1]))} points.`,
         action: strongestGap[1] > 0
-          ? `Oriente les prochains versements vers cette poche.`
-          : `Evite de l'alimenter tant qu'elle ne revient pas dans la bande cible.`,
+          ? "Les prochains versements doivent aller en priorite sur cette poche."
+          : "Mieux vaut ne plus l'alimenter tant qu'elle reste au-dessus de la cible.",
       });
     }
   }
@@ -610,9 +816,9 @@ function generateRecommendations(currentState, metrics, plan) {
   if (laggingGoal) {
     recommendations.push({
       priority: laggingGoal.priority,
-      title: `Recadrer l'objectif ${laggingGoal.label.toLowerCase()}`,
-      detail: `Il manque ${currency.format(laggingGoal.paceGap)} par mois pour tenir le plan actuel.`,
-      action: `Augmente la contribution mensuelle ou allonge l'horizon pour rester coherent.`,
+      title: `Remettre l'objectif ${laggingGoal.label.toLowerCase()} sur de bons rails`,
+      detail: `Il manque ${currency.format(laggingGoal.paceGap)} par mois pour tenir le rythme actuel.`,
+      action: "Deux solutions simples: verser un peu plus chaque mois ou laisser plus de temps au projet.",
     });
   }
 
@@ -620,18 +826,18 @@ function generateRecommendations(currentState, metrics, plan) {
     const delta = (metrics.targetSavingsRate - metrics.savingsRate) * metrics.income;
     recommendations.push({
       priority: "medium",
-      title: "Monter le taux d'epargne",
+      title: "Augmenter un peu l'epargne mensuelle",
       detail: `Tu es a ${percent.format(metrics.savingsRate)} pour une cible de ${percent.format(metrics.targetSavingsRate)}.`,
-      action: `Degage ${currency.format(delta)} de marge supplementaire par mois pour atteindre la cible.`,
+      action: `Trouve ${currency.format(delta)} de marge supplementaire par mois pour atteindre la cible.`,
     });
   }
 
   if (!recommendations.length) {
     recommendations.push({
       priority: "low",
-      title: "Systeme en regime stable",
-      detail: "Le buffer, l'allocation et les objectifs sont coherents avec la strategie.",
-      action: `Continue a deployer ${currency.format(plan.reduce((sum, item) => sum + item.amount, 0))} par mois selon le plan ci-dessous.`,
+      title: "Le systeme est bien calibre",
+      detail: "Le matelas, l'allocation et les objectifs restent coherents avec la situation actuelle.",
+      action: `Continue a suivre ce plan mensuel de ${currency.format(plan.reduce((sum, item) => sum + item.amount, 0))}.`,
     });
   }
 
@@ -656,11 +862,13 @@ function buildScenarioPreview(currentState, metrics) {
 }
 
 function render() {
+  applyAssistantModel();
   const metrics = computeMetrics(state);
   const monthlyPlan = buildMonthlyPlan(state, metrics);
   const recommendations = generateRecommendations(state, metrics, monthlyPlan);
   const scenarioPreview = buildScenarioPreview(state, metrics);
 
+  renderAssistant(metrics, monthlyPlan);
   renderHeader(metrics);
   renderKpis(metrics);
   renderPlan(monthlyPlan, metrics);
@@ -675,19 +883,60 @@ function render() {
   animateBars();
 }
 
+function renderAssistant(metrics, monthlyPlan) {
+  populateForm(refs.assistantForm, {
+    "assistant.monthlyIncome": state.assistant.monthlyIncome,
+    "assistant.monthlyExpenses": state.assistant.monthlyExpenses,
+    "assistant.currentSavings": state.assistant.currentSavings,
+    "assistant.projectLabel": state.assistant.projectLabel,
+    "assistant.projectType": state.assistant.projectType,
+    "assistant.projectTarget": state.assistant.projectTarget,
+    "assistant.projectYears": state.assistant.projectYears,
+    "assistant.comfort": state.assistant.comfort,
+  });
+
+  const primaryGoal = metrics.goalStatus.find((goal) => goal.id === "goal-main") || metrics.goalStatus[0];
+  const firstPlan = monthlyPlan[0];
+
+  refs.assistantSummary.innerHTML = `
+    <div class="assistant-card-stack">
+      <article class="assistant-card assistant-card-strong">
+        <p class="panel-kicker">Lecture immediate</p>
+        <strong>${currency.format(metrics.monthlySurplus)}</strong>
+        <p class="microcopy">C'est ce qu'il te reste chaque mois apres depenses.</p>
+      </article>
+      <article class="assistant-card">
+        <p class="panel-kicker">Projet compris</p>
+        <strong>${primaryGoal.label}</strong>
+        <p class="microcopy">${currency.format(primaryGoal.current)} deja disponibles sur ${currency.format(primaryGoal.target)} a viser en ${number.format(primaryGoal.horizonMonths / 12)} ans.</p>
+      </article>
+      <article class="assistant-card">
+        <p class="panel-kicker">Strategie choisie</p>
+        <strong>${strategyPresets[state.strategy.mode].label}</strong>
+        <p class="microcopy">${assistantComfortLabel(state.assistant.comfort)}. ${strategyPresets[state.strategy.mode].description}</p>
+      </article>
+      <article class="assistant-card">
+        <p class="panel-kicker">Priorite automatique</p>
+        <strong>${firstPlan ? firstPlan.label : "Reduire les depenses"}</strong>
+        <p class="microcopy">${firstPlan ? `${currency.format(firstPlan.amount)} ce mois-ci vers ${firstPlan.destination}.` : "L'app recommande d'abord de recreer de la marge mensuelle."}</p>
+      </article>
+    </div>
+  `;
+}
+
 function renderHeader(metrics) {
   refs.heroSummary.innerHTML = `
     <article class="hero-stat">
-      <small>Patrimoine net</small>
-      <strong>${currency.format(metrics.netWorth)}</strong>
+      <small>Reste par mois</small>
+      <strong>${currency.format(metrics.monthlySurplus)}</strong>
     </article>
     <article class="hero-stat">
-      <small>Taux d'epargne</small>
-      <strong>${percent.format(metrics.savingsRate)}</strong>
+      <small>Epargne disponible</small>
+      <strong>${currency.format(state.assistant.currentSavings)}</strong>
     </article>
     <article class="hero-stat">
-      <small>A deployer</small>
-      <strong>${currency.format(Math.max(0, Math.min(metrics.monthlySurplus, state.strategy.monthlyInvestableCash)))}</strong>
+      <small>Projet</small>
+      <strong>${state.assistant.projectLabel}</strong>
     </article>
   `;
 
@@ -810,25 +1059,29 @@ function renderRecommendations(recommendations) {
 }
 
 function renderForms() {
-  populateForm(refs.cashflowForm, {
-    "profile.monthlyIncome": state.profile.monthlyIncome,
-    "profile.fixedCosts": state.profile.fixedCosts,
-    "profile.variableCosts": state.profile.variableCosts,
-    "profile.debtPayments": state.profile.debtPayments,
-    "profile.targetSavingsRate": state.profile.targetSavingsRate,
-    "strategy.monthlyInvestableCash": state.strategy.monthlyInvestableCash,
-  });
+  if (refs.cashflowForm) {
+    populateForm(refs.cashflowForm, {
+      "profile.monthlyIncome": state.profile.monthlyIncome,
+      "profile.fixedCosts": state.profile.fixedCosts,
+      "profile.variableCosts": state.profile.variableCosts,
+      "profile.debtPayments": state.profile.debtPayments,
+      "profile.targetSavingsRate": state.profile.targetSavingsRate,
+      "strategy.monthlyInvestableCash": state.strategy.monthlyInvestableCash,
+    });
+  }
 
-  populateForm(refs.strategyForm, {
-    "strategy.mode": state.strategy.mode,
-    "strategy.objective": state.strategy.objective,
-    "profile.investmentHorizonYears": state.profile.investmentHorizonYears,
-    "profile.emergencyMonths": state.profile.emergencyMonths,
-    "strategy.maxEquity": state.strategy.maxEquity,
-    "strategy.rebalanceBand": state.strategy.rebalanceBand,
-    "strategy.debtRule": state.strategy.debtRule,
-    "strategy.housingProjectYears": state.strategy.housingProjectYears,
-  });
+  if (refs.strategyForm) {
+    populateForm(refs.strategyForm, {
+      "strategy.mode": state.strategy.mode,
+      "strategy.objective": state.strategy.objective,
+      "profile.investmentHorizonYears": state.profile.investmentHorizonYears,
+      "profile.emergencyMonths": state.profile.emergencyMonths,
+      "strategy.maxEquity": state.strategy.maxEquity,
+      "strategy.rebalanceBand": state.strategy.rebalanceBand,
+      "strategy.debtRule": state.strategy.debtRule,
+      "strategy.housingProjectYears": state.strategy.housingProjectYears,
+    });
+  }
 }
 
 function populateForm(form, values) {
@@ -1144,7 +1397,10 @@ function openGoalDialog(goal) {
 function bindEvents() {
   const handleLiveUpdate = (event) => {
     const { name, value } = event.target;
-    if (!name || (!name.startsWith("profile.") && !name.startsWith("strategy."))) {
+    if (
+      !name ||
+      (!name.startsWith("profile.") && !name.startsWith("strategy.") && !name.startsWith("assistant."))
+    ) {
       return;
     }
 
@@ -1290,6 +1546,7 @@ function loadImportedState(parsed) {
     ...clone(defaultState),
     ...parsed,
     meta: { ...clone(defaultState.meta), ...(parsed.meta || {}) },
+    assistant: { ...clone(defaultState.assistant), ...(parsed.assistant || {}) },
     profile: { ...clone(defaultState.profile), ...(parsed.profile || {}) },
     strategy: { ...clone(defaultState.strategy), ...(parsed.strategy || {}) },
     routines: { ...clone(defaultState.routines), ...(parsed.routines || {}) },
