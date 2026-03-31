@@ -354,11 +354,12 @@ document.getElementById('get-advice-btn').addEventListener('click', async () => 
   }
 
   btn.disabled = true;
-  content.innerHTML = `<div class="advice-loading"><div class="spinner"></div>Claude analyse votre situation financière…</div>`;
+  content.innerHTML = `<div class="advice-loading"><div class="spinner"></div>Analyse de votre situation en cours…</div>`;
 
   try {
-    // Récupérer le token JWT de la session active
-    const { data: { session } } = await supabase.auth.getSession();
+    // Forcer un refresh du token pour éviter les JWT expirés
+    const { data: refreshData } = await supabase.auth.refreshSession();
+    const session = refreshData?.session;
     if (!session?.access_token) throw new Error('Session expirée, reconnectez-vous.');
 
     const res = await fetch(`${SUPABASE_URL}/functions/v1/finance-advisor`, {
@@ -377,8 +378,8 @@ document.getElementById('get-advice-btn').addEventListener('click', async () => 
 
     if (!res.ok) {
       const errText = await res.text().catch(() => '');
-      if (res.status === 500 && errText.includes('ANTHROPIC_API_KEY')) {
-        throw new Error('La clé API Anthropic n\'est pas configurée dans Supabase.');
+      if (res.status === 500 && errText.includes('OPENAI_API_KEY')) {
+        throw new Error('La clé API OpenAI n\'est pas configurée dans Supabase.');
       }
       throw new Error(`Erreur ${res.status} : ${errText || 'indisponible'}`);
     }
