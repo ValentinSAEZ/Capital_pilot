@@ -57,7 +57,7 @@ function showApp() {
   document.getElementById('app').classList.remove('is-hidden');
   document.body.classList.remove('auth-active');
   document.getElementById('user-name').textContent =
-    state.profile.display_name || state.user?.email?.split('@')[0] || 'Vous';
+    state.profile.display_name || state.user?.user_metadata?.display_name || state.user?.email?.split('@')[0] || 'Vous';
   renderAll();
   if (marketTimer) clearInterval(marketTimer);
   fetchMarketData();
@@ -210,6 +210,8 @@ document.getElementById('save-profile-btn').addEventListener('click', async (e) 
   const form = document.getElementById('profile-form');
   const fd = new FormData(form);
   const updates = {
+    id: state.user.id,
+    display_name: state.profile.display_name || state.user?.user_metadata?.display_name || state.user?.email?.split('@')[0],
     monthly_income: Number(fd.get('monthly_income')) || 0,
     monthly_expenses: Number(fd.get('monthly_expenses')) || 0,
     comfort: fd.get('comfort'),
@@ -223,7 +225,7 @@ document.getElementById('save-profile-btn').addEventListener('click', async (e) 
   };
 
   try {
-    const { error } = await supabase.from('fp_profiles').update(updates).eq('id', state.user.id);
+    const { error } = await supabase.from('fp_profiles').upsert(updates, { onConflict: 'id' });
     if (!error) {
       Object.assign(state.profile, updates);
       renderAll();
