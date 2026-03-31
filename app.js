@@ -40,6 +40,8 @@ const projectTypeLabels = {
 // ── STATE ─────────────────────────────────────
 let state = { user: null, profile: {}, accounts: [], goals: [], family: null, familyMembers: [] };
 let marketTimer = null;
+let adviceRefreshTimer = null;
+let adviceRequestVersion = 0;
 
 // ── INIT : vérification session au chargement ──
 (async () => {
@@ -225,22 +227,7 @@ document.getElementById('save-profile-btn').addEventListener('click', async (e) 
   btn.textContent = 'Enregistrement...';
   btn.disabled = true;
 
-  const form = document.getElementById('profile-form');
-  const fd = new FormData(form);
-  const updates = {
-    id: state.user.id,
-    display_name: state.profile.display_name || state.user?.user_metadata?.display_name || state.user?.email?.split('@')[0],
-    monthly_income: Number(fd.get('monthly_income')) || 0,
-    monthly_expenses: Number(fd.get('monthly_expenses')) || 0,
-    comfort: fd.get('comfort'),
-    investment_horizon_years: Number(fd.get('investment_horizon_years')) || 0,
-    emergency_months: Number(fd.get('emergency_months')) || 0,
-    target_savings_rate: Number(fd.get('target_savings_rate')) || 0,
-    project_label: fd.get('project_label'),
-    project_type: fd.get('project_type'),
-    project_target: Number(fd.get('project_target')) || 0,
-    project_years: Number(fd.get('project_years')) || 0,
-  };
+  const updates = getLiveProfileState();
 
   try {
     const { data, error } = await supabase.rpc('save_profile', {
@@ -326,6 +313,42 @@ function renderProfileForm() {
     if (el && p[f] != null) el.value = p[f];
   });
 }
+
+function getLiveProfileState() {
+  const form = document.getElementById('profile-form');
+  const fd = new FormData(form);
+  return {
+    id: state.user?.id,
+    family_id: state.profile?.family_id ?? null,
+    display_name: state.profile.display_name || state.user?.user_metadata?.display_name || state.user?.email?.split('@')[0],
+    monthly_income: Number(fd.get('monthly_income')) || 0,
+    monthly_expenses: Number(fd.get('monthly_expenses')) || 0,
+    comfort: fd.get('comfort') || 'balanced',
+    investment_horizon_years: Number(fd.get('investment_horizon_years')) || 0,
+    emergency_months: Number(fd.get('emergency_months')) || 0,
+    target_savings_rate: Number(fd.get('target_savings_rate')) || 0,
+    project_label: fd.get('project_label')?.toString().trim() || '',
+    project_type: fd.get('project_type') || 'capitalisation',
+    project_target: Number(fd.get('project_target')) || 0,
+    project_years: Number(fd.get('project_years')) || 0,
+  };
+}
+
+function queueAdviceRefresh({ preferRemote = true, delay = 900 } = {}) {
+  if (adviceRefreshTimer) clearTimeout(adviceRefreshTimer);
+  adviceRefreshTimer = setTimeout(() => {
+    refreshAdvice({ preferRemote, loadingMessage: 'Le compagnon financier réanalyse votre situation…' }).catch(() => {});
+  }, delay);
+}
+
+document.getElementById('profile-form').addEventListener('input', (event) => {
+  if (!(event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement)) return;
+  queueAdviceRefresh({ preferRemote: true, delay: 1100 });
+});
+
+document.getElementById('profile-form').addEventListener('change', () => {
+  queueAdviceRefresh({ preferRemote: true, delay: 400 });
+});
 
 // ── ACCOUNTS ──────────────────────────────────
 function renderAccounts() {
@@ -551,6 +574,7 @@ async function refreshAdvice({ preferRemote = false, loadingMessage = 'Analyse e
   const btn = document.getElementById('get-advice-btn');
   const content = document.getElementById('advice-content');
   const snapshot = buildAdviceSnapshot();
+  const requestVersion = ++adviceRequestVersion;
 
   if (!snapshot.isReady) {
     renderAdvicePlaceholder();
@@ -562,16 +586,19 @@ async function refreshAdvice({ preferRemote = false, loadingMessage = 'Analyse e
   content.innerHTML = `<div class="advice-loading"><div class="spinner"></div>${loadingMessage}</div>`;
 
   const localPlan = buildLocalAdvice(snapshot);
-  const remoteAdvice = preferRemote ? await getRemoteAdvice(snapshot, localPlan) : null;
+  content.innerHTML = buildAdviceHtml(snapshot, localPlan, null, preferRemote ? 'Analyse IA en cours…' : '');
 
-  content.innerHTML = buildAdviceHtml(snapshot, localPlan, remoteAdvice);
+  const remoteResult = preferRemote ? await getRemoteAdvice(snapshot, localPlan, requestVersion) : { advice: null, error: '' };
+  if (requestVersion !== adviceRequestVersion) return;
+
+  content.innerHTML = buildAdviceHtml(snapshot, localPlan, remoteResult.advice, remoteResult.error);
   document.getElementById('advice-timestamp').textContent =
     `Mis à jour à ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
   btn.disabled = false;
 }
 
 function buildAdviceSnapshot() {
-  const profile = state.profile || {};
+  const profile = getLiveProfileState();
   const income = Number(profile.monthly_income) || 0;
   const expenses = Number(profile.monthly_expenses) || 0;
   const surplus = income - expenses;
@@ -796,7 +823,7 @@ function buildLocalAdvice(snapshot) {
   };
 }
 
-function buildAdviceHtml(snapshot, plan, remoteAdvice) {
+function buildAdviceHtml(snapshot, plan, remoteAdvice, remoteStatus = '') {
   const metrics = [
     { label: 'Capacité mensuelle', value: eur(snapshot.surplus) },
     { label: 'Patrimoine net', value: eur(snapshot.netWorth) },
@@ -822,8 +849,10 @@ function buildAdviceHtml(snapshot, plan, remoteAdvice) {
     : '<p>Ajoutez vos comptes et placements pour obtenir une allocation vraiment personnalisée.</p>';
 
   const remoteHtml = remoteAdvice
-    ? `<div class="advice-panel"><h4>Lecture IA complémentaire</h4><div class="advice-remote">${remoteAdvice}</div></div>`
-    : '';
+    ? `<div class="advice-panel"><h4>Lecture IA temps réel</h4><div class="advice-remote">${remoteAdvice}</div></div>`
+    : remoteStatus
+      ? `<div class="advice-panel"><h4>Lecture IA temps réel</h4><p class="advice-note">${escapeHtml(remoteStatus)}</p></div>`
+      : '';
 
   return `
     <div class="advice-board">
@@ -865,21 +894,23 @@ function buildAdviceHtml(snapshot, plan, remoteAdvice) {
   `;
 }
 
-async function getRemoteAdvice(snapshot, plan) {
+async function getRemoteAdvice(snapshot, plan, requestVersion) {
   try {
     const { data, error } = await supabase.functions.invoke('finance-advisor', {
       body: {
-        profile: state.profile,
+        profile: snapshot.profile,
         accounts: state.accounts,
         goals: state.goals,
         snapshot,
         plan,
       },
     });
-    if (error || !data?.advice) return null;
-    return data.advice;
+    if (requestVersion !== adviceRequestVersion) return { advice: null, error: '' };
+    if (error) return { advice: null, error: error.message || 'IA distante indisponible.' };
+    if (!data?.advice) return { advice: null, error: data?.error || 'La function finance-advisor ne renvoie pas encore de conseil.' };
+    return { advice: data.advice, error: '' };
   } catch {
-    return null;
+    return { advice: null, error: 'Impossible de joindre la function finance-advisor.' };
   }
 }
 
