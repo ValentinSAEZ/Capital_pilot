@@ -1,1515 +1,643 @@
-const STORAGE_KEY = "capital-pilot-state-v1";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const strategyPresets = {
-  security: {
-    label: "Securite",
-    description: "Priorise la tresorerie et la stabilite avant la performance.",
-    target: { cash: 46, bonds: 34, equities: 15, real_assets: 5 },
-  },
-  balanced: {
-    label: "Equilibre",
-    description: "Mix polyvalent pour faire croitre le capital sans perdre la flexibilite.",
-    target: { cash: 22, bonds: 23, equities: 45, real_assets: 10 },
-  },
-  growth: {
-    label: "Croissance",
-    description: "Accent sur les actifs de croissance pour un horizon long.",
-    target: { cash: 12, bonds: 10, equities: 68, real_assets: 10 },
-  },
-  income: {
-    label: "Revenus",
-    description: "Renforce les poches distributives et le portage obligataire.",
-    target: { cash: 16, bonds: 38, equities: 28, real_assets: 18 },
-  },
-  property: {
-    label: "Projet immobilier",
-    description: "Preserve l'apport et reduit le risque a court et moyen terme.",
-    target: { cash: 38, bonds: 28, equities: 24, real_assets: 10 },
-  },
-};
+const SUPABASE_URL = 'https://rsvjdpuhrkczzgibdsff.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJzdmpkcHVocmtjenpnaWJkc2ZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5NDgzOTEsImV4cCI6MjA5MDUyNDM5MX0.v-bMdJy3Kp2dtcGJ0-V5p-2ONQBaZiuVnnzXwrDTP4U';
 
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON);
+
+// ── FORMATTERS ────────────────────────────────
+const eur = (n) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
+const pct = (n) => `${(+n).toFixed(1)} %`;
+
+// ── LABELS ────────────────────────────────────
 const bucketLabels = {
-  cash: "Tresorerie",
-  bonds: "Obligataire",
-  equities: "Actions",
-  real_assets: "Actifs reels",
+  cash: 'Cash',
+  savings: 'Épargne liquide',
+  equities: 'Actions / ETF',
+  bonds: 'Obligataire',
+  real_assets: 'Immobilier',
+  debt: 'Dette',
 };
 
-const accountBucketLabels = {
-  cash: "Cash",
-  savings: "Epargne liquide",
-  equities: "Actions / ETF",
-  bonds: "Obligataire / fonds euro",
-  real_assets: "Immobilier / reels",
-  debt: "Dette",
-};
-
-const priorityLabels = {
-  critical: "Critique",
-  high: "Haute",
-  medium: "Moyenne",
-  low: "Basse",
-};
-
-const defaultState = {
-  meta: {
-    owner: "Valentin",
-    lastReview: "2026-03-31",
-    nextReview: "2026-04-05",
-  },
-  assistant: {
-    monthlyIncome: 4200,
-    monthlyExpenses: 2410,
-    currentSavings: 18000,
-    projectLabel: "Acheter ma residence principale",
-    projectType: "property",
-    projectTarget: 50000,
-    projectYears: 4,
-    comfort: "balanced",
-  },
-  profile: {
-    monthlyIncome: 4200,
-    fixedCosts: 1650,
-    variableCosts: 760,
-    debtPayments: 230,
-    emergencyMonths: 6,
-    investmentHorizonYears: 12,
-    targetSavingsRate: 25,
-  },
-  strategy: {
-    mode: "balanced",
-    objective: "capitalisation",
-    monthlyInvestableCash: 950,
-    maxEquity: 65,
-    rebalanceBand: 5,
-    debtRule: "hybrid",
-    housingProjectYears: 4,
-  },
-  accounts: [
-    {
-      id: "acc-bank",
-      label: "Compte courant",
-      bucket: "cash",
-      balance: 8200,
-      rate: 0.4,
-      wrapper: "Banque principale",
-    },
-    {
-      id: "acc-livret",
-      label: "Livret A",
-      bucket: "savings",
-      balance: 14800,
-      rate: 3,
-      wrapper: "Livret",
-    },
-    {
-      id: "acc-pea",
-      label: "PEA ETF Monde",
-      bucket: "equities",
-      balance: 18600,
-      rate: 0,
-      wrapper: "PEA",
-    },
-    {
-      id: "acc-av",
-      label: "Assurance-vie fonds euro",
-      bucket: "bonds",
-      balance: 12300,
-      rate: 2.7,
-      wrapper: "Assurance-vie",
-    },
-    {
-      id: "acc-scpi",
-      label: "SCPI / immobilier papier",
-      bucket: "real_assets",
-      balance: 6800,
-      rate: 4.4,
-      wrapper: "SCPI",
-    },
-    {
-      id: "acc-loan",
-      label: "Credit auto",
-      bucket: "debt",
-      balance: -6400,
-      rate: 4.9,
-      wrapper: "Credit amortissable",
-    },
-  ],
-  goals: [
-    {
-      id: "goal-emergency",
-      label: "Fonds de securite",
-      target: 15840,
-      current: 14800,
-      monthlyContribution: 250,
-      horizonMonths: 4,
-      priority: "critical",
-    },
-    {
-      id: "goal-home",
-      label: "Apport immobilier",
-      target: 50000,
-      current: 18000,
-      monthlyContribution: 400,
-      horizonMonths: 48,
-      priority: "high",
-    },
-    {
-      id: "goal-retire",
-      label: "Retraite long terme",
-      target: 250000,
-      current: 37700,
-      monthlyContribution: 300,
-      horizonMonths: 240,
-      priority: "medium",
-    },
-  ],
-  routines: {
-    weeklyReviewDay: "Dimanche",
-    monthlyCloseDay: 1,
-    alerts: [
-      "Verifier la tresorerie disponible sur 30 jours",
-      "Controler la derive de l'allocation vs la cible",
-      "Revoir l'objectif immobilier si l'horizon change",
-    ],
-  },
-};
-
-const assumptions = {
-  cash: 2.5,
-  bonds: 3.2,
-  equities: 6.8,
-  real_assets: 4.5,
-};
-
-const currency = new Intl.NumberFormat("fr-FR", {
-  style: "currency",
-  currency: "EUR",
-  maximumFractionDigits: 0,
-});
-
-const percent = new Intl.NumberFormat("fr-FR", {
-  style: "percent",
-  maximumFractionDigits: 1,
-});
-
-const number = new Intl.NumberFormat("fr-FR", {
-  maximumFractionDigits: 1,
-});
-
-const longDate = new Intl.DateTimeFormat("fr-FR", {
-  dateStyle: "long",
-});
-
-const refs = {
-  assistantForm: document.getElementById("assistant-form"),
-  assistantSummary: document.getElementById("assistant-summary"),
-  kpiGrid: document.getElementById("kpi-grid"),
-  overviewMeta: document.getElementById("overview-meta"),
-  statusContent: document.getElementById("status-content"),
-  heroSummary: document.getElementById("hero-summary"),
-  monthlyPlan: document.getElementById("monthly-plan"),
-  recommendationList: document.getElementById("recommendation-list"),
-  cashflowForm: document.getElementById("cashflow-form"),
-  cashflowBreakdown: document.getElementById("cashflow-breakdown"),
-  allocationChart: document.getElementById("allocation-chart"),
-  allocationDrifts: document.getElementById("allocation-drifts"),
-  goalsList: document.getElementById("goals-list"),
-  strategyForm: document.getElementById("strategy-form"),
-  strategyInsights: document.getElementById("strategy-insights"),
-  accountsBody: document.getElementById("accounts-body"),
-  ritualContent: document.getElementById("ritual-content"),
-  scenarioContent: document.getElementById("scenario-content"),
-  accountDialog: document.getElementById("account-dialog"),
-  accountForm: document.getElementById("account-form"),
-  goalDialog: document.getElementById("goal-dialog"),
-  goalForm: document.getElementById("goal-form"),
-  addAccountButton: document.getElementById("add-account-button"),
-  addGoalButton: document.getElementById("add-goal-button"),
-};
-
-let state = loadState();
-function clone(value) {
-  return JSON.parse(JSON.stringify(value));
-}
-
-function loadState() {
-  try {
-    const saved = window.localStorage.getItem(STORAGE_KEY);
-    if (!saved) {
-      return clone(defaultState);
-    }
-
-    const parsed = JSON.parse(saved);
-    return {
-      ...clone(defaultState),
-      ...parsed,
-      meta: { ...clone(defaultState.meta), ...(parsed.meta || {}) },
-      assistant: { ...clone(defaultState.assistant), ...(parsed.assistant || {}) },
-      profile: { ...clone(defaultState.profile), ...(parsed.profile || {}) },
-      strategy: { ...clone(defaultState.strategy), ...(parsed.strategy || {}) },
-      routines: { ...clone(defaultState.routines), ...(parsed.routines || {}) },
-      accounts: Array.isArray(parsed.accounts) ? parsed.accounts : clone(defaultState.accounts),
-      goals: Array.isArray(parsed.goals) ? parsed.goals : clone(defaultState.goals),
-    };
-  } catch (error) {
-    return clone(defaultState);
-  }
-}
-
-function saveState() {
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-}
-
-function assistantProjectTypeLabel(value) {
-  const labels = {
-    property: "Acheter un bien",
-    capitalisation: "Faire grandir mon argent",
-    retirement: "Preparer ma retraite",
-    safety: "Construire un matelas de securite",
-    income: "Chercher plus de revenu",
-  };
-  return labels[value] || value;
-}
-
-function assistantComfortLabel(value) {
-  const labels = {
-    safe: "Prudent",
-    balanced: "Equilibre",
-    dynamic: "Dynamique",
-  };
-  return labels[value] || value;
-}
-
-function buildAutoAccounts(totalSavings, targetAllocation, reserveTarget, projectType) {
-  const safeSavings = Math.max(0, totalSavings);
-  if (!safeSavings) {
-    return [
-      {
-        id: "acc-auto-cash",
-        label: "Tresorerie principale",
-        bucket: "cash",
-        balance: 0,
-        rate: 2.5,
-        wrapper: "Poche automatique",
-      },
-    ];
-  }
-
-  let cashBalance = Math.min(
-    safeSavings,
-    Math.max(reserveTarget, safeSavings * ((targetAllocation.cash || 0) / 100)),
-  );
-
-  if (projectType === "property" || projectType === "safety") {
-    cashBalance = Math.min(safeSavings, Math.max(cashBalance, safeSavings * 0.6));
-  }
-
-  const remaining = Math.max(0, safeSavings - cashBalance);
-  const otherWeights = normalizeWeights({
-    bonds: targetAllocation.bonds || 0,
-    equities: targetAllocation.equities || 0,
-    real_assets: targetAllocation.real_assets || 0,
-  });
-  const split = distributeAmount(round(remaining), otherWeights);
-
-  return [
-    {
-      id: "acc-auto-cash",
-      label: projectType === "property" ? "Poche projet + securite" : "Tresorerie principale",
-      bucket: "cash",
-      balance: cashBalance,
-      rate: 2.5,
-      wrapper: "Poche automatique",
-    },
-    {
-      id: "acc-auto-bonds",
-      label: "Poche prudente",
-      bucket: "bonds",
-      balance: split.bonds || 0,
-      rate: 3.2,
-      wrapper: "Support prudent",
-    },
-    {
-      id: "acc-auto-equities",
-      label: "Poche croissance",
-      bucket: "equities",
-      balance: split.equities || 0,
-      rate: 6.8,
-      wrapper: "ETF / diversification",
-    },
-    {
-      id: "acc-auto-real",
-      label: "Poche projet long terme",
-      bucket: "real_assets",
-      balance: split.real_assets || 0,
-      rate: 4.5,
-      wrapper: "Actifs reels",
-    },
-  ].filter((account) => account.balance > 0 || account.bucket === "cash");
-}
-
-function applyAssistantModel() {
-  const assistant = state.assistant || clone(defaultState.assistant);
-  const income = Math.max(0, Number(assistant.monthlyIncome) || 0);
-  const expenses = Math.max(0, Number(assistant.monthlyExpenses) || 0);
-  const savings = Math.max(0, Number(assistant.currentSavings) || 0);
-  const projectYears = Math.max(1, Number(assistant.projectYears) || 1);
-  const projectTarget = Math.max(0, Number(assistant.projectTarget) || 0);
-  const projectType = assistant.projectType || "capitalisation";
-  const comfort = assistant.comfort || "balanced";
-  const comfortSettings = {
-    safe: { mode: "security", maxEquity: 35, emergencyMonths: 6, rebalanceBand: 4 },
-    balanced: { mode: "balanced", maxEquity: 60, emergencyMonths: 5, rebalanceBand: 5 },
-    dynamic: { mode: "growth", maxEquity: 80, emergencyMonths: 4, rebalanceBand: 7 },
-  }[comfort] || { mode: "balanced", maxEquity: 60, emergencyMonths: 5, rebalanceBand: 5 };
-
-  const objectiveByProject = {
-    property: "property",
-    capitalisation: "capitalisation",
-    retirement: "retirement",
-    safety: "stability",
-    income: "income",
-  };
-
-  const monthlySurplus = Math.max(0, income - expenses);
-  const fixedCosts = round(expenses * 0.68);
-  const variableCosts = Math.max(0, expenses - fixedCosts);
-
-  state.profile.monthlyIncome = income;
-  state.profile.fixedCosts = fixedCosts;
-  state.profile.variableCosts = variableCosts;
-  state.profile.debtPayments = 0;
-  state.profile.targetSavingsRate = income > 0 ? clamp(round((monthlySurplus / income) * 100), 5, 45) : 0;
-  state.profile.emergencyMonths = comfortSettings.emergencyMonths + (projectType === "safety" ? 1 : 0);
-  state.profile.investmentHorizonYears = projectType === "retirement" ? Math.max(12, projectYears) : projectYears;
-
-  state.strategy.mode = projectType === "property" ? "property" : comfortSettings.mode;
-  state.strategy.objective = objectiveByProject[projectType] || "capitalisation";
-  state.strategy.monthlyInvestableCash = round(monthlySurplus);
-  state.strategy.maxEquity = comfortSettings.maxEquity;
-  state.strategy.rebalanceBand = comfortSettings.rebalanceBand;
-  state.strategy.debtRule = "minimum";
-  state.strategy.housingProjectYears = projectType === "property" ? projectYears : 8;
-
-  const reserveTarget = expenses * state.profile.emergencyMonths;
-  const targetAllocation = getTargetAllocation(state);
-  state.accounts = buildAutoAccounts(savings, targetAllocation, reserveTarget, projectType);
-
-  const monthlyReserveContribution =
-    savings >= reserveTarget ? round(monthlySurplus * 0.1) : round(monthlySurplus * 0.35);
-  const monthlyProjectContribution = round(
-    monthlySurplus * (projectType === "retirement" ? 0.5 : projectType === "property" ? 0.55 : 0.4),
-  );
-  const monthlyLongTermContribution = Math.max(
-    0,
-    round(monthlySurplus - monthlyReserveContribution - monthlyProjectContribution),
-  );
-
-  const reserveCurrent = Math.min(savings, reserveTarget);
-  const primaryGoalCurrent = Math.min(
-    projectTarget,
-    projectType === "safety" ? reserveCurrent : Math.max(0, savings - reserveCurrent),
-  );
-
-  const primaryGoalLabel = assistant.projectLabel?.trim() || assistantProjectTypeLabel(projectType);
-
-  state.goals = [
-    {
-      id: "goal-security",
-      label: "Matelas de securite",
-      target: reserveTarget,
-      current: reserveCurrent,
-      monthlyContribution: Math.max(0, monthlyReserveContribution),
-      horizonMonths: Math.max(1, state.profile.emergencyMonths * 6),
-      priority: "critical",
-    },
-    {
-      id: "goal-main",
-      label: primaryGoalLabel,
-      target: projectTarget || reserveTarget,
-      current: primaryGoalCurrent,
-      monthlyContribution: Math.max(0, monthlyProjectContribution),
-      horizonMonths: Math.max(1, projectYears * 12),
-      priority: "high",
-    },
-  ];
-
-  if (projectType !== "retirement") {
-    state.goals.push({
-      id: "goal-long-term",
-      label: "Capital long terme",
-      target: Math.max(60000, savings + monthlyLongTermContribution * 120),
-      current: Math.max(0, savings - primaryGoalCurrent),
-      monthlyContribution: Math.max(0, monthlyLongTermContribution),
-      horizonMonths: 120,
-      priority: "medium",
-    });
-  }
-
-  state.routines.alerts = [
-    `Verifier que ${currency.format(Math.max(0, monthlySurplus))} restent bien disponibles chaque mois`,
-    `Comparer la poche projet a l'objectif ${primaryGoalLabel.toLowerCase()}`,
-    "Controler une fois par semaine que les depenses n'ont pas derive",
-  ];
-}
-
-function uid(prefix) {
-  return `${prefix}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value));
-}
-
-function round(value) {
-  return Math.round(value);
-}
-
-function formatDate(value) {
-  return longDate.format(new Date(value));
-}
-
-function mappedBucket(bucket) {
-  return bucket === "savings" ? "cash" : bucket;
-}
-
-function normalizeWeights(weights) {
-  const total = Object.values(weights).reduce((sum, value) => sum + value, 0);
-  if (!total) {
-    return weights;
-  }
-
-  return Object.fromEntries(
-    Object.entries(weights).map(([key, value]) => [key, (value / total) * 100]),
-  );
-}
-
-function distributeAmount(total, weights) {
-  const entries = Object.entries(weights).filter(([, value]) => value > 0);
-  const totalWeight = entries.reduce((sum, [, value]) => sum + value, 0);
-  if (!entries.length || !totalWeight || total <= 0) {
-    return {};
-  }
-
-  const raw = entries.map(([key, value]) => ({
-    key,
-    value: (value / totalWeight) * total,
-  }));
-  const rounded = raw.map((item) => ({
-    key: item.key,
-    value: Math.floor(item.value),
-    remainder: item.value - Math.floor(item.value),
-  }));
-
-  let missing = total - rounded.reduce((sum, item) => sum + item.value, 0);
-  rounded
-    .sort((left, right) => right.remainder - left.remainder)
-    .forEach((item) => {
-      if (missing <= 0) {
-        return;
-      }
-      item.value += 1;
-      missing -= 1;
-    });
-
-  return Object.fromEntries(
-    rounded
-      .filter((item) => item.value > 0)
-      .map((item) => [item.key, item.value]),
-  );
-}
-
-function getTargetAllocation(currentState) {
-  const preset = strategyPresets[currentState.strategy.mode] || strategyPresets.balanced;
-  const target = { ...preset.target };
-
-  if (currentState.strategy.objective === "income") {
-    target.bonds += 5;
-    target.equities -= 3;
-    target.cash -= 2;
-  }
-
-  if (currentState.strategy.objective === "retirement" && currentState.profile.investmentHorizonYears >= 10) {
-    target.equities += 5;
-    target.cash -= 3;
-    target.bonds -= 2;
-  }
-
-  if (
-    currentState.strategy.objective === "property" ||
-    currentState.strategy.housingProjectYears <= 5
-  ) {
-    target.cash += 6;
-    target.bonds += 4;
-    target.equities -= 8;
-    target.real_assets -= 2;
-  }
-
-  const equityCap = clamp(currentState.strategy.maxEquity, 10, 90);
-  if (target.equities > equityCap) {
-    const delta = target.equities - equityCap;
-    target.equities = equityCap;
-    target.bonds += delta * 0.6;
-    target.cash += delta * 0.4;
-  }
-
-  return normalizeWeights(target);
-}
-
-function computeMetrics(currentState) {
-  const income = Number(currentState.profile.monthlyIncome) || 0;
-  const fixedCosts = Number(currentState.profile.fixedCosts) || 0;
-  const variableCosts = Number(currentState.profile.variableCosts) || 0;
-  const debtPayments = Number(currentState.profile.debtPayments) || 0;
-  const monthlyBurn = fixedCosts + variableCosts + debtPayments;
-  const monthlySurplus = income - monthlyBurn;
-  const targetSavingsRate = (Number(currentState.profile.targetSavingsRate) || 0) / 100;
-  const emergencyMonths = Number(currentState.profile.emergencyMonths) || 0;
-
-  const positiveAccounts = currentState.accounts.filter((account) => Number(account.balance) >= 0);
-  const debtAccounts = currentState.accounts.filter((account) => account.bucket === "debt");
-
-  const positiveAssets = positiveAccounts.reduce((sum, account) => sum + Number(account.balance), 0);
-  const debtTotal = debtAccounts.reduce((sum, account) => sum + Math.abs(Number(account.balance)), 0);
-  const netWorth = positiveAssets - debtTotal;
-  const liquidAssets = currentState.accounts
-    .filter((account) => account.bucket === "cash" || account.bucket === "savings")
-    .reduce((sum, account) => sum + Number(account.balance), 0);
-  const reserveTarget = monthlyBurn * emergencyMonths;
-  const reserveGap = Math.max(0, reserveTarget - liquidAssets);
-  const idleCash = Math.max(0, liquidAssets - reserveTarget * 1.15);
-  const runwayMonths = monthlyBurn > 0 ? liquidAssets / monthlyBurn : 0;
-  const savingsRate = income > 0 ? monthlySurplus / income : 0;
-
-  const portfolioTotals = { cash: 0, bonds: 0, equities: 0, real_assets: 0 };
-  positiveAccounts.forEach((account) => {
-    portfolioTotals[mappedBucket(account.bucket)] += Number(account.balance);
-  });
-
-  const investableTotal = Object.values(portfolioTotals).reduce((sum, value) => sum + value, 0);
-  const currentAllocation = investableTotal
-    ? Object.fromEntries(
-        Object.entries(portfolioTotals).map(([key, value]) => [key, (value / investableTotal) * 100]),
-      )
-    : { cash: 0, bonds: 0, equities: 0, real_assets: 0 };
-
-  const targetAllocation = getTargetAllocation(currentState);
-  const allocationGaps = Object.fromEntries(
-    Object.keys(targetAllocation).map((key) => [key, targetAllocation[key] - (currentAllocation[key] || 0)]),
-  );
-
-  const expectedReturn = Object.entries(currentAllocation).reduce(
-    (sum, [key, value]) => sum + (value / 100) * assumptions[key],
-    0,
-  );
-  const riskScore = clamp(
-    round(
-      currentAllocation.equities * 0.95 +
-        currentAllocation.real_assets * 0.7 +
-        currentAllocation.bonds * 0.32 +
-        currentAllocation.cash * 0.1,
-    ),
-    0,
-    100,
-  );
-
-  const goalStatus = currentState.goals.map((goal) => {
-    const progress = goal.target > 0 ? clamp(goal.current / goal.target, 0, 1.5) : 0;
-    const requiredMonthly = Math.max(0, (goal.target - goal.current) / Math.max(goal.horizonMonths, 1));
-    const paceGap = Math.max(0, requiredMonthly - goal.monthlyContribution);
-    return {
-      ...goal,
-      progress,
-      requiredMonthly,
-      paceGap,
-      health:
-        progress >= 1
-          ? "ahead"
-          : paceGap <= 0
-            ? "ontrack"
-            : paceGap / Math.max(requiredMonthly, 1) > 0.35
-              ? "late"
-              : "watch",
-    };
-  });
-
-  return {
-    income,
-    monthlyBurn,
-    monthlySurplus,
-    targetSavingsRate,
-    netWorth,
-    liquidAssets,
-    reserveTarget,
-    reserveGap,
-    idleCash,
-    runwayMonths,
-    savingsRate,
-    currentAllocation,
-    targetAllocation,
-    allocationGaps,
-    investableTotal,
-    expectedReturn,
-    riskScore,
-    portfolioTotals,
-    goalStatus,
-    debtAccounts,
-  };
-}
-
-function getDestinationLabel(bucket, currentState) {
-  if (bucket === "cash") {
-    return currentState.strategy.objective === "property" ? "Livret / poche apport" : "Livret A / LDDS";
-  }
-  if (bucket === "bonds") {
-    return "Assurance-vie / fonds euro";
-  }
-  if (bucket === "equities") {
-    return "PEA / ETF global large cap";
-  }
-  return "Immobilier papier / poche reelle";
-}
-
-function buildMonthlyPlan(currentState, metrics) {
-  let remaining = Math.max(0, Math.min(metrics.monthlySurplus, currentState.strategy.monthlyInvestableCash));
-  const plan = [];
-
-  if (remaining <= 0) {
-    return plan;
-  }
-
-  if (metrics.reserveGap > 0) {
-    const reserveShare = Math.min(round(remaining * 0.45), metrics.reserveGap);
-    if (reserveShare > 0) {
-      remaining -= reserveShare;
-      plan.push({
-        label: "Renforcer le matelas de securite",
-        amount: reserveShare,
-        bucket: "cash",
-        destination: getDestinationLabel("cash", currentState),
-      });
-    }
-  }
-
-  const expensiveDebt = metrics.debtAccounts
-    .filter((account) => Number(account.rate) >= 4)
-    .sort((left, right) => Number(right.rate) - Number(left.rate))[0];
-
-  if (expensiveDebt && currentState.strategy.debtRule !== "minimum" && remaining > 0) {
-    const debtShare = Math.min(round(remaining * (currentState.strategy.debtRule === "avalanche" ? 0.45 : 0.25)), Math.abs(Number(expensiveDebt.balance)));
-    if (debtShare > 0) {
-      remaining -= debtShare;
-      plan.push({
-        label: "Remboursement anticipe",
-        amount: debtShare,
-        bucket: "debt",
-        destination: expensiveDebt.label,
-      });
-    }
-  }
-
-  if (remaining > 0 && currentState.strategy.objective === "property" && currentState.strategy.housingProjectYears <= 5) {
-    const propertyShare = round(remaining * 0.3);
-    if (propertyShare > 0) {
-      remaining -= propertyShare;
-      plan.push({
-        label: "Flacher l'apport immobilier",
-        amount: propertyShare,
-        bucket: "cash",
-        destination: "Poche apport / livret",
-      });
-    }
-  }
-
-  if (remaining > 0) {
-    const positiveGaps = Object.fromEntries(
-      Object.entries(metrics.allocationGaps).filter(([, gap]) => gap > 0.5),
-    );
-    const weights = Object.keys(positiveGaps).length ? positiveGaps : metrics.targetAllocation;
-    const split = distributeAmount(round(remaining), weights);
-    Object.entries(split).forEach(([bucket, amount]) => {
-      plan.push({
-        label: `Alimenter la poche ${bucketLabels[bucket].toLowerCase()}`,
-        amount,
-        bucket,
-        destination: getDestinationLabel(bucket, currentState),
-      });
-    });
-  }
-
-  return plan;
-}
-
-function generateRecommendations(currentState, metrics, plan) {
-  const recommendations = [];
-
-  if (metrics.monthlySurplus <= 0) {
-    recommendations.push({
-      priority: "critical",
-      title: "Depenser un peu moins chaque mois",
-      detail: `En ce moment, il manque ${currency.format(Math.abs(metrics.monthlySurplus))} pour finir le mois sans stress.`,
-      action: `Avant d'investir, retrouve au moins ${currency.format(Math.abs(metrics.monthlySurplus) + 150)} de marge.`,
-    });
+const priorityLabels = { critical: 'Critique', high: 'Haute', medium: 'Moyenne', low: 'Basse' };
+
+// ── STATE ─────────────────────────────────────
+let state = { user: null, profile: {}, accounts: [], goals: [], family: null, familyMembers: [] };
+let marketTimer = null;
+
+// ── INIT : vérification session au chargement ──
+(async () => {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session?.user) {
+    state.user = session.user;
+    try { await loadAll(); } catch (e) { console.warn('loadAll:', e); }
+    showApp();
   } else {
-    if (metrics.reserveGap > 0) {
-      const topUp = Math.min(round(metrics.monthlySurplus * 0.45), metrics.reserveGap);
-      recommendations.push({
-        priority: "critical",
-        title: "Completer d'abord la reserve de securite",
-        detail: `Il manque ${currency.format(metrics.reserveGap)} pour avoir ${number.format(currentState.profile.emergencyMonths)} mois de depenses de cote.`,
-        action: `Mets ${currency.format(topUp)} par mois sur la poche securite jusqu'au bon niveau.`,
-      });
-    }
-
-    const expensiveDebt = metrics.debtAccounts
-      .filter((account) => Number(account.rate) >= 4)
-      .sort((left, right) => Number(right.rate) - Number(left.rate))[0];
-
-    if (expensiveDebt && currentState.strategy.debtRule !== "minimum") {
-      recommendations.push({
-        priority: "high",
-        title: "Remettre un peu plus sur la dette chere",
-        detail: `${expensiveDebt.label} coute ${number.format(Number(expensiveDebt.rate))} % par an.`,
-        action: "Tant que ce taux reste eleve, mieux vaut la ralentir avant de prendre plus de risque.",
-      });
-    }
-
-    if (metrics.idleCash > 2000) {
-      const largestPositiveGap =
-        Object.entries(metrics.allocationGaps).sort((left, right) => right[1] - left[1])[0] || [];
-      recommendations.push({
-        priority: "high",
-        title: "Utiliser l'argent qui dort",
-        detail: `${currency.format(metrics.idleCash)} restent au-dessus du matelas de securite cible.`,
-        action: `Dirige cette somme en priorite vers ${bucketLabels[largestPositiveGap[0] || "equities"].toLowerCase()} via ${getDestinationLabel(largestPositiveGap[0] || "equities", currentState)}.`,
-      });
-    }
-
-    const strongestGap = Object.entries(metrics.allocationGaps)
-      .sort((left, right) => Math.abs(right[1]) - Math.abs(left[1]))[0];
-
-    if (strongestGap && Math.abs(strongestGap[1]) >= currentState.strategy.rebalanceBand) {
-      const direction = strongestGap[1] > 0 ? "sous-ponderee" : "sur-ponderee";
-      recommendations.push({
-        priority: "medium",
-        title: "Remettre le portefeuille dans l'axe",
-        detail: `La poche ${bucketLabels[strongestGap[0]].toLowerCase()} est ${direction} de ${number.format(Math.abs(strongestGap[1]))} points.`,
-        action: strongestGap[1] > 0
-          ? "Les prochains versements doivent aller en priorite sur cette poche."
-          : "Mieux vaut ne plus l'alimenter tant qu'elle reste au-dessus de la cible.",
-      });
-    }
+    showAuth();
   }
+})();
 
-  const laggingGoal = metrics.goalStatus
-    .filter((goal) => goal.paceGap > 0)
-    .sort((left, right) => right.paceGap - left.paceGap)[0];
+// Déconnexion automatique si la session expire
+supabase.auth.onAuthStateChange((event) => {
+  if (event === 'SIGNED_OUT') {
+    state.user = null;
+    showAuth();
+  }
+});
 
-  if (laggingGoal) {
-    recommendations.push({
-      priority: laggingGoal.priority,
-      title: `Remettre l'objectif ${laggingGoal.label.toLowerCase()} sur de bons rails`,
-      detail: `Il manque ${currency.format(laggingGoal.paceGap)} par mois pour tenir le rythme actuel.`,
-      action: "Deux solutions simples: verser un peu plus chaque mois ou laisser plus de temps au projet.",
+// ── AUTH UI ───────────────────────────────────
+function showAuth() {
+  document.getElementById('auth-screen').classList.remove('is-hidden');
+  document.getElementById('app').classList.add('is-hidden');
+  document.body.classList.add('auth-active');
+}
+
+function showApp() {
+  document.getElementById('auth-screen').classList.add('is-hidden');
+  document.getElementById('app').classList.remove('is-hidden');
+  document.body.classList.remove('auth-active');
+  document.getElementById('user-name').textContent =
+    state.profile.display_name || state.user?.email?.split('@')[0] || 'Vous';
+  renderAll();
+  if (marketTimer) clearInterval(marketTimer);
+  fetchMarketData();
+  marketTimer = setInterval(fetchMarketData, 5 * 60 * 1000);
+}
+
+// Tab switching in auth
+document.querySelectorAll('.auth-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const target = btn.dataset.target;
+    document.getElementById('login-form').classList.toggle('auth-form--hidden', target !== 'login-form');
+    document.getElementById('signup-form').classList.toggle('auth-form--hidden', target !== 'signup-form');
+    document.querySelectorAll('.auth-tab').forEach(t => {
+      t.classList.toggle('active', t.dataset.target === target);
     });
-  }
+    clearAuthError();
+  });
+});
 
-  if (metrics.savingsRate < metrics.targetSavingsRate && metrics.monthlySurplus > 0) {
-    const delta = (metrics.targetSavingsRate - metrics.savingsRate) * metrics.income;
-    recommendations.push({
-      priority: "medium",
-      title: "Augmenter un peu l'epargne mensuelle",
-      detail: `Tu es a ${percent.format(metrics.savingsRate)} pour une cible de ${percent.format(metrics.targetSavingsRate)}.`,
-      action: `Trouve ${currency.format(delta)} de marge supplementaire par mois pour atteindre la cible.`,
+document.getElementById('login-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = e.target.querySelector('button[type=submit]');
+  btn.disabled = true;
+  btn.textContent = 'Connexion…';
+  try {
+    const fd = new FormData(e.target);
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: fd.get('email'),
+      password: fd.get('password'),
     });
-  }
-
-  if (!recommendations.length) {
-    recommendations.push({
-      priority: "low",
-      title: "Le systeme est bien calibre",
-      detail: "Le matelas, l'allocation et les objectifs restent coherents avec la situation actuelle.",
-      action: `Continue a suivre ce plan mensuel de ${currency.format(plan.reduce((sum, item) => sum + item.amount, 0))}.`,
-    });
-  }
-
-  return recommendations.slice(0, 6);
-}
-
-function buildScenarioPreview(currentState, metrics) {
-  const modes = ["security", "balanced", "growth", "income", "property"];
-  return modes.map((mode) => {
-    const shadowState = clone(currentState);
-    shadowState.strategy.mode = mode;
-    const shadowMetrics = computeMetrics(shadowState);
-    return {
-      mode,
-      label: strategyPresets[mode].label,
-      description: strategyPresets[mode].description,
-      target: shadowMetrics.targetAllocation,
-      expectedReturn: shadowMetrics.expectedReturn,
-      riskScore: shadowMetrics.riskScore,
-    };
-  });
-}
-
-function render() {
-  applyAssistantModel();
-  const metrics = computeMetrics(state);
-  const monthlyPlan = buildMonthlyPlan(state, metrics);
-  const recommendations = generateRecommendations(state, metrics, monthlyPlan);
-  const scenarioPreview = buildScenarioPreview(state, metrics);
-
-  renderAssistant(metrics, monthlyPlan);
-  renderHeader(metrics);
-  renderKpis(metrics);
-  renderPlan(monthlyPlan, metrics);
-  renderRecommendations(recommendations);
-  renderForms();
-  renderCashflow(metrics);
-  renderAllocation(metrics);
-  renderGoals(metrics);
-  renderAccounts();
-  renderStrategy(metrics, scenarioPreview);
-  renderRitual(metrics, scenarioPreview);
-  animateBars();
-}
-
-function renderAssistant(metrics, monthlyPlan) {
-  populateForm(refs.assistantForm, {
-    "assistant.monthlyIncome": state.assistant.monthlyIncome,
-    "assistant.monthlyExpenses": state.assistant.monthlyExpenses,
-    "assistant.currentSavings": state.assistant.currentSavings,
-    "assistant.projectLabel": state.assistant.projectLabel,
-    "assistant.projectType": state.assistant.projectType,
-    "assistant.projectTarget": state.assistant.projectTarget,
-    "assistant.projectYears": state.assistant.projectYears,
-    "assistant.comfort": state.assistant.comfort,
-  });
-
-  const primaryGoal = metrics.goalStatus.find((goal) => goal.id === "goal-main") || metrics.goalStatus[0];
-  const firstPlan = monthlyPlan[0];
-
-  refs.assistantSummary.innerHTML = `
-    <div class="assistant-card-stack">
-      <article class="assistant-card assistant-card-strong">
-        <p class="panel-kicker">En un coup d'oeil</p>
-        <strong>${currency.format(metrics.monthlySurplus)}</strong>
-        <p class="microcopy">C'est la somme qui reste chaque mois une fois les depenses payees.</p>
-      </article>
-      <article class="assistant-card">
-        <p class="panel-kicker">Projet compris</p>
-        <strong>${primaryGoal.label}</strong>
-        <p class="microcopy">${currency.format(primaryGoal.current)} deja de cote sur ${currency.format(primaryGoal.target)} a atteindre en ${number.format(primaryGoal.horizonMonths / 12)} ans.</p>
-      </article>
-      <article class="assistant-card">
-        <p class="panel-kicker">Style retenu</p>
-        <strong>${strategyPresets[state.strategy.mode].label}</strong>
-        <p class="microcopy">${assistantComfortLabel(state.assistant.comfort)}. ${strategyPresets[state.strategy.mode].description}</p>
-      </article>
-      <article class="assistant-card">
-        <p class="panel-kicker">Priorite du mois</p>
-        <strong>${firstPlan ? firstPlan.label : "Reduire les depenses"}</strong>
-        <p class="microcopy">${firstPlan ? `${currency.format(firstPlan.amount)} ce mois-ci vers ${firstPlan.destination}.` : "L'app recommande d'abord de recreer de la marge mensuelle."}</p>
-      </article>
-    </div>
-  `;
-}
-
-function renderHeader(metrics) {
-  refs.heroSummary.innerHTML = `
-    <article class="hero-stat">
-      <small>Budget libre</small>
-      <strong>${currency.format(metrics.monthlySurplus)}</strong>
-    </article>
-    <article class="hero-stat">
-      <small>Epargne mise de cote</small>
-      <strong>${currency.format(state.assistant.currentSavings)}</strong>
-    </article>
-    <article class="hero-stat">
-      <small>Projet principal</small>
-      <strong>${state.assistant.projectLabel}</strong>
-    </article>
-  `;
-
-  refs.overviewMeta.innerHTML = [
-    statusChip("Mode", strategyPresets[state.strategy.mode].label),
-    statusChip("Objectif", objectiveLabel(state.strategy.objective)),
-    statusChip("Revue", formatDate(state.meta.lastReview)),
-  ].join("");
-
-  refs.statusContent.innerHTML = `
-    <div class="ritual-stack">
-      ${statusSummary("Prochaine revue", formatDate(state.meta.nextReview))}
-      ${statusSummary("Coussin actuel", `${number.format(metrics.runwayMonths)} mois`)}
-      ${statusSummary("Style", strategyPresets[state.strategy.mode].label)}
-    </div>
-  `;
-}
-
-function renderKpis(metrics) {
-  const items = [
-    {
-      label: "Patrimoine net",
-      value: currency.format(metrics.netWorth),
-      note: "Actifs moins dettes",
-    },
-    {
-      label: "Tresorerie liquide",
-      value: currency.format(metrics.liquidAssets),
-      note: "Cash + epargne disponible",
-    },
-    {
-      label: "Cashflow libre",
-      value: currency.format(metrics.monthlySurplus),
-      note: "Ce qu'il reste apres le mois",
-    },
-    {
-      label: "Taux d'epargne",
-      value: percent.format(metrics.savingsRate),
-      note: "Part du revenu mise de cote",
-    },
-    {
-      label: "Rendement cible",
-      value: percent.format(metrics.expectedReturn / 100),
-      note: "Base sur la composition actuelle",
-    },
-    {
-      label: "Buffer vise",
-      value: currency.format(metrics.reserveTarget),
-      note: `${number.format(state.profile.emergencyMonths)} mois de depenses`,
-    },
-  ];
-
-  refs.kpiGrid.innerHTML = items
-    .map(
-      (item) => `
-        <article class="kpi-item">
-          <span>${item.label}</span>
-          <strong>${item.value}</strong>
-          <span>${item.note}</span>
-        </article>
-      `,
-    )
-    .join("");
-}
-
-function renderPlan(plan, metrics) {
-  const totalPlanned = plan.reduce((sum, item) => sum + item.amount, 0);
-  if (!plan.length) {
-    refs.monthlyPlan.innerHTML = `<p class="empty-state">Pour l'instant, il n'y a pas de somme a repartir. L'etape prioritaire est de recreer un peu de marge mensuelle.</p>`;
-    return;
-  }
-
-  refs.monthlyPlan.innerHTML = `
-    <div class="plan-stack">
-      <article class="plan-item">
-        <div class="plan-head">
-          <div>
-            <p class="panel-kicker">Plan 30 jours</p>
-            <strong class="amount">${currency.format(totalPlanned)}</strong>
-          </div>
-          <small>${currency.format(metrics.monthlySurplus)} de cashflow libre, ${currency.format(state.strategy.monthlyInvestableCash)} deployables</small>
-        </div>
-      </article>
-      ${plan
-        .map(
-          (item) => `
-            <article class="plan-item">
-              <div class="plan-head">
-                <strong>${item.label}</strong>
-                <span class="amount">${currency.format(item.amount)}</span>
-              </div>
-              <small>${item.destination}</small>
-            </article>
-          `,
-        )
-        .join("")}
-    </div>
-  `;
-}
-
-function renderRecommendations(recommendations) {
-  refs.recommendationList.innerHTML = `
-    <div class="recommendation-stack">
-      ${recommendations
-        .map(
-          (item) => `
-            <article class="recommendation">
-              <div class="recommendation-head">
-                <span class="priority-badge priority-${item.priority}">${priorityLabels[item.priority]}</span>
-                <strong>${item.title}</strong>
-              </div>
-              <p>${item.detail}</p>
-              <small>${item.action}</small>
-            </article>
-          `,
-        )
-        .join("")}
-    </div>
-  `;
-}
-
-function renderForms() {
-  if (refs.cashflowForm) {
-    populateForm(refs.cashflowForm, {
-      "profile.monthlyIncome": state.profile.monthlyIncome,
-      "profile.fixedCosts": state.profile.fixedCosts,
-      "profile.variableCosts": state.profile.variableCosts,
-      "profile.debtPayments": state.profile.debtPayments,
-      "profile.targetSavingsRate": state.profile.targetSavingsRate,
-      "strategy.monthlyInvestableCash": state.strategy.monthlyInvestableCash,
-    });
-  }
-
-  if (refs.strategyForm) {
-    populateForm(refs.strategyForm, {
-      "strategy.mode": state.strategy.mode,
-      "strategy.objective": state.strategy.objective,
-      "profile.investmentHorizonYears": state.profile.investmentHorizonYears,
-      "profile.emergencyMonths": state.profile.emergencyMonths,
-      "strategy.maxEquity": state.strategy.maxEquity,
-      "strategy.rebalanceBand": state.strategy.rebalanceBand,
-      "strategy.debtRule": state.strategy.debtRule,
-      "strategy.housingProjectYears": state.strategy.housingProjectYears,
-    });
-  }
-}
-
-function populateForm(form, values) {
-  Object.entries(values).forEach(([key, value]) => {
-    const field = form.elements.namedItem(key);
-    if (field) {
-      field.value = value;
-    }
-  });
-}
-
-function renderCashflow(metrics) {
-  const maxBase = Math.max(metrics.income, metrics.monthlyBurn, metrics.monthlySurplus, 1);
-  const rows = [
-    { label: "Revenu", value: metrics.income, key: "income" },
-    { label: "Depenses", value: metrics.monthlyBurn, key: "burn" },
-    { label: "Surplus", value: Math.max(metrics.monthlySurplus, 0), key: "surplus" },
-  ];
-
-  refs.cashflowBreakdown.innerHTML = rows
-    .map(
-      (row) => `
-        <div class="waterfall-row">
-          <div class="label-row">
-            <strong>${row.label}</strong>
-            <span>${currency.format(row.value)}</span>
-          </div>
-          <div class="waterfall-track">
-            <div class="waterfall-fill ${row.key}" data-width="${(row.value / maxBase) * 100}%"></div>
-          </div>
-        </div>
-      `,
-    )
-    .join("");
-}
-
-function renderAllocation(metrics) {
-  const rows = Object.keys(metrics.targetAllocation).map((bucket) => {
-    const current = metrics.currentAllocation[bucket] || 0;
-    const target = metrics.targetAllocation[bucket] || 0;
-    return `
-      <article class="allocation-card">
-        <div class="allocation-head">
-          <div>
-            <strong>${bucketLabels[bucket]}</strong>
-            <small>${currency.format(metrics.portfolioTotals[bucket] || 0)}</small>
-          </div>
-          <small>cible ${number.format(target)} %</small>
-        </div>
-        <div class="bar-track">
-          <div class="bar-fill ${bucket}" data-width="${current}%"></div>
-        </div>
-        <div class="label-row">
-          <small>actuel ${number.format(current)} %</small>
-          <small>${number.format(target - current)} pts vs cible</small>
-        </div>
-      </article>
-    `;
-  });
-
-  refs.allocationChart.innerHTML = `<div class="allocation-stack">${rows.join("")}</div>`;
-
-  refs.allocationDrifts.innerHTML = `
-    <div class="drift-stack">
-      <article class="drift-card">
-        <p class="panel-kicker">Lecture</p>
-        <strong>${strategyPresets[state.strategy.mode].label}</strong>
-        <p>${strategyPresets[state.strategy.mode].description}</p>
-      </article>
-      ${Object.entries(metrics.allocationGaps)
-        .sort((left, right) => Math.abs(right[1]) - Math.abs(left[1]))
-        .map(([bucket, value]) => {
-          const status = value >= 0 ? "positive" : "negative";
-          const tone = value >= 0 ? "a renforcer" : "a freiner";
-          return `
-            <article class="drift-card">
-              <div class="label-row">
-                <strong>${bucketLabels[bucket]}</strong>
-                <span class="drift-value ${status}">${number.format(value)} pts</span>
-              </div>
-              <small>${tone}</small>
-            </article>
-          `;
-        })
-        .join("")}
-    </div>
-  `;
-}
-
-function renderGoals(metrics) {
-  if (!metrics.goalStatus.length) {
-    refs.goalsList.innerHTML = `<p class="empty-state">Ajoute un objectif pour suivre une cible financiere.</p>`;
-    return;
-  }
-
-  refs.goalsList.innerHTML = `
-    <div class="goal-stack">
-      ${metrics.goalStatus
-        .map((goal) => `
-          <article class="goal-card">
-            <div class="goal-head">
-              <div>
-                <span class="priority-badge priority-${goal.priority}">${priorityLabels[goal.priority]}</span>
-                <strong>${goal.label}</strong>
-              </div>
-              <div class="table-actions">
-                <button class="text-button" data-goal-edit="${goal.id}">Modifier</button>
-                <button class="text-button" data-goal-delete="${goal.id}">Supprimer</button>
-              </div>
-            </div>
-            <small>${currency.format(goal.current)} sur ${currency.format(goal.target)} en ${goal.horizonMonths} mois</small>
-            <div class="goal-track">
-              <div class="goal-fill" data-width="${clamp(goal.progress * 100, 0, 100)}%"></div>
-            </div>
-            <div class="label-row">
-              <small>Contribution ${currency.format(goal.monthlyContribution)} / mois</small>
-              <small>Rythme requis ${currency.format(goal.requiredMonthly)} / mois</small>
-            </div>
-          </article>
-        `)
-        .join("")}
-    </div>
-  `;
-}
-
-function renderAccounts() {
-  refs.accountsBody.innerHTML = state.accounts
-    .map(
-      (account) => `
-        <tr>
-          <td>${account.label}</td>
-          <td>${accountBucketLabels[account.bucket]}</td>
-          <td>${currency.format(Number(account.balance))}</td>
-          <td>${number.format(Number(account.rate) || 0)} %</td>
-          <td>${account.wrapper || "-"}</td>
-          <td>
-            <div class="table-actions">
-              <button class="text-button" data-account-edit="${account.id}">Modifier</button>
-              <button class="text-button" data-account-delete="${account.id}">Supprimer</button>
-            </div>
-          </td>
-        </tr>
-      `,
-    )
-    .join("");
-}
-
-function renderStrategy(metrics, scenarioPreview) {
-  const projectionFiveYears = projectCapital(metrics, 60);
-  refs.strategyInsights.innerHTML = `
-    <div class="scenario-stack">
-      <article class="scenario-card">
-        <p class="panel-kicker">Projection 5 ans</p>
-        <strong>${currency.format(projectionFiveYears.finalValue)}</strong>
-        <small>Avec ${currency.format(Math.max(0, Math.min(metrics.monthlySurplus, state.strategy.monthlyInvestableCash)))} investis par mois et ${percent.format(metrics.expectedReturn / 100)} de rendement attendu.</small>
-      </article>
-      <article class="scenario-card">
-        <p class="panel-kicker">Style de portefeuille</p>
-        <strong>${metrics.riskScore}/100</strong>
-        <small>Score de risque approximatif derive de la part actions et actifs reels.</small>
-      </article>
-      ${scenarioPreview
-        .filter((scenario) => scenario.mode !== state.strategy.mode)
-        .slice(0, 3)
-        .map(
-          (scenario) => `
-            <article class="scenario-card">
-              <div class="label-row">
-                <strong>${scenario.label}</strong>
-                <small>${percent.format(scenario.expectedReturn / 100)}</small>
-              </div>
-              <small>${scenario.description}</small>
-            </article>
-          `,
-        )
-        .join("")}
-    </div>
-  `;
-}
-
-function renderRitual(metrics, scenarioPreview) {
-  refs.ritualContent.innerHTML = `
-    <div class="ritual-stack">
-      <article class="ritual-card">
-        <div class="ritual-head">
-          <div>
-            <p class="panel-kicker">Rituel hebdo</p>
-            <strong>15 minutes chaque ${state.routines.weeklyReviewDay.toLowerCase()}</strong>
-          </div>
-          <small>Prochaine revue: ${formatDate(state.meta.nextReview)}</small>
-        </div>
-      </article>
-      ${state.routines.alerts
-        .map(
-          (alert) => `
-            <article class="ritual-card">
-              <small>${alert}</small>
-            </article>
-          `,
-        )
-        .join("")}
-      <article class="ritual-card">
-        <small>Buffer actuel: ${number.format(metrics.runwayMonths)} mois. Objectif: ${number.format(state.profile.emergencyMonths)} mois.</small>
-      </article>
-    </div>
-  `;
-
-  refs.scenarioContent.innerHTML = `
-    <div class="scenario-stack">
-      <article class="whatif-card">
-        <p class="panel-kicker">What-if</p>
-        <strong>Comment les conseils changent</strong>
-        <small>Passe d'un mode a l'autre pour recalculer la cible et les prochains versements.</small>
-      </article>
-      ${scenarioPreview
-        .map(
-          (scenario) => `
-            <article class="scenario-card">
-              <div class="label-row">
-                <strong>${scenario.label}</strong>
-                <small>${scenario.mode === state.strategy.mode ? "actif" : "simulation"}</small>
-              </div>
-              <small>
-                Rendement cible ${percent.format(scenario.expectedReturn / 100)}.
-                Actions ${number.format(scenario.target.equities)} %.
-              </small>
-            </article>
-          `,
-        )
-        .join("")}
-    </div>
-  `;
-}
-
-function projectCapital(metrics, months) {
-  const monthlyContribution = Math.max(0, Math.min(metrics.monthlySurplus, state.strategy.monthlyInvestableCash));
-  const monthlyRate = metrics.expectedReturn / 100 / 12;
-  let value = metrics.netWorth;
-
-  for (let month = 0; month < months; month += 1) {
-    value = value * (1 + monthlyRate) + monthlyContribution;
-  }
-
-  return { finalValue: value };
-}
-
-function statusChip(label, value) {
-  return `<span class="status-chip"><small>${label}</small><strong>${value}</strong></span>`;
-}
-
-function statusSummary(label, value) {
-  return `
-    <div class="status-chip">
-      <small>${label}</small>
-      <strong>${value}</strong>
-    </div>
-  `;
-}
-
-function objectiveLabel(value) {
-  const labels = {
-    capitalisation: "Capitalisation",
-    income: "Revenu",
-    property: "Immobilier",
-    retirement: "Retraite",
-    stability: "Stabilite",
-  };
-  return labels[value] || value;
-}
-
-function updateByPath(path, value) {
-  const [root, key] = path.split(".");
-  if (!root || !key || !state[root]) {
-    return;
-  }
-
-  state[root][key] = typeof state[root][key] === "number" ? Number(value) : value;
-}
-
-function animateBars() {
-  document.querySelectorAll("[data-width]").forEach((node) => {
-    node.style.width = node.getAttribute("data-width");
-  });
-}
-
-function openAccountDialog(account) {
-  refs.accountForm.reset();
-  populateForm(refs.accountForm, {
-    id: account?.id || "",
-    label: account?.label || "",
-    bucket: account?.bucket || "cash",
-    balance: account?.balance || 0,
-    rate: account?.rate || 0,
-    wrapper: account?.wrapper || "",
-  });
-  refs.accountDialog.showModal();
-}
-
-function openGoalDialog(goal) {
-  refs.goalForm.reset();
-  populateForm(refs.goalForm, {
-    id: goal?.id || "",
-    label: goal?.label || "",
-    target: goal?.target || 0,
-    current: goal?.current || 0,
-    monthlyContribution: goal?.monthlyContribution || 0,
-    horizonMonths: goal?.horizonMonths || 12,
-    priority: goal?.priority || "medium",
-  });
-  refs.goalDialog.showModal();
-}
-
-function bindEvents() {
-  const handleLiveUpdate = (event) => {
-    const { name, value } = event.target;
-    if (
-      !name ||
-      (!name.startsWith("profile.") && !name.startsWith("strategy.") && !name.startsWith("assistant."))
-    ) {
+    if (error) {
+      const msg = (error.message.includes('Invalid login') || error.message.includes('invalid'))
+        ? 'Email ou mot de passe incorrect.'
+        : error.message.includes('confirmed')
+        ? 'Compte non confirmé. Réessayez ou contactez l\'administrateur.'
+        : error.message;
+      showAuthError(msg);
       return;
     }
+    // Succès : charger les données et afficher l'app directement
+    state.user = data.user;
+    try { await loadAll(); } catch (err) { console.warn('loadAll:', err); }
+    showApp();
+  } catch {
+    showAuthError('Erreur réseau. Vérifiez votre connexion.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Se connecter';
+  }
+});
 
-    updateByPath(name, value);
-    saveState();
-    render();
-  };
-
-  document.addEventListener("input", handleLiveUpdate);
-  document.addEventListener("change", handleLiveUpdate);
-
-  refs.addAccountButton.addEventListener("click", () => openAccountDialog());
-  refs.addGoalButton.addEventListener("click", () => openGoalDialog());
-
-  refs.accountForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const data = Object.fromEntries(new FormData(refs.accountForm).entries());
-    const account = {
-      id: data.id || uid("acc"),
-      label: data.label,
-      bucket: data.bucket,
-      balance: Number(data.balance) || 0,
-      rate: Number(data.rate) || 0,
-      wrapper: data.wrapper,
-    };
-    const index = state.accounts.findIndex((item) => item.id === account.id);
-    if (index >= 0) {
-      state.accounts[index] = account;
-    } else {
-      state.accounts.push(account);
+document.getElementById('signup-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = e.target.querySelector('button[type=submit]');
+  btn.disabled = true;
+  btn.textContent = 'Création…';
+  const fd = new FormData(e.target);
+  const email = fd.get('email');
+  const password = fd.get('password');
+  try {
+    const { error: signUpError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { display_name: fd.get('display_name') } },
+    });
+    if (signUpError) {
+      const msg = (signUpError.message.includes('already registered') || signUpError.message.includes('already been registered'))
+        ? 'Cet email est déjà utilisé. Connectez-vous à la place.'
+        : signUpError.message.includes('Password')
+        ? 'Mot de passe trop court (8 caractères minimum).'
+        : signUpError.message;
+      showAuthError(msg);
+      return;
     }
-    refs.accountDialog.close();
-    saveState();
-    render();
-  });
+    // signUp ne retourne pas de session quand la confirmation email est active.
+    // On enchaîne immédiatement un signIn pour obtenir une session valide.
+    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+    if (signInError) {
+      showAuthError('Compte créé mais connexion impossible : ' + signInError.message);
+      return;
+    }
+    state.user = signInData.user;
+    const code = fd.get('invite_code').trim().toUpperCase();
+    if (code && state.user) {
+      try { await joinFamilyByCode(code, state.user.id); } catch {}
+    }
+    try { await loadAll(); } catch (err) { console.warn('loadAll:', err); }
+    showApp();
+  } catch {
+    showAuthError('Erreur réseau. Vérifiez votre connexion.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Créer mon compte';
+  }
+});
 
-  refs.goalForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const data = Object.fromEntries(new FormData(refs.goalForm).entries());
-    const goal = {
-      id: data.id || uid("goal"),
-      label: data.label,
-      target: Number(data.target) || 0,
-      current: Number(data.current) || 0,
-      monthlyContribution: Number(data.monthlyContribution) || 0,
-      horizonMonths: Number(data.horizonMonths) || 1,
-      priority: data.priority,
-    };
-    const index = state.goals.findIndex((item) => item.id === goal.id);
-    if (index >= 0) {
-      state.goals[index] = goal;
-    } else {
-      state.goals.push(goal);
-    }
-    refs.goalDialog.close();
-    saveState();
-    render();
-  });
+document.getElementById('logout-btn').addEventListener('click', () => supabase.auth.signOut());
 
-  document.addEventListener("click", (event) => {
-    const accountEditId = event.target.getAttribute("data-account-edit");
-    const accountDeleteId = event.target.getAttribute("data-account-delete");
-    const goalEditId = event.target.getAttribute("data-goal-edit");
-    const goalDeleteId = event.target.getAttribute("data-goal-delete");
-
-    if (accountEditId) {
-      openAccountDialog(state.accounts.find((account) => account.id === accountEditId));
-    }
-    if (accountDeleteId) {
-      state.accounts = state.accounts.filter((account) => account.id !== accountDeleteId);
-      saveState();
-      render();
-    }
-    if (goalEditId) {
-      openGoalDialog(state.goals.find((goal) => goal.id === goalEditId));
-    }
-    if (goalDeleteId) {
-      state.goals = state.goals.filter((goal) => goal.id !== goalDeleteId);
-      saveState();
-      render();
-    }
-
-    const dialogToClose = event.target.getAttribute("data-close-dialog");
-    if (dialogToClose) {
-      document.getElementById(dialogToClose)?.close();
-    }
-  });
-
+function showAuthError(msg, type = 'error') {
+  const el = document.getElementById('auth-error');
+  el.textContent = msg;
+  el.style.color = type === 'info' ? 'var(--ok)' : 'var(--danger)';
+  el.style.background = type === 'info' ? 'rgba(127,197,154,0.1)' : 'rgba(241,138,124,0.1)';
+  el.hidden = false;
 }
+function clearAuthError() { document.getElementById('auth-error').hidden = true; }
 
-function initReveal() {
-  const sections = document.querySelectorAll("[data-reveal]");
-  const observer = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add("is-visible");
-        }
-      });
-    },
-    { threshold: 0.12 },
-  );
-  sections.forEach((section) => observer.observe(section));
-}
+// ── DATA LOADING ──────────────────────────────
+async function loadAll() {
+  const uid = state.user.id;
+  const [profileRes, accountsRes, goalsRes] = await Promise.all([
+    supabase.from('fp_profiles').select('*').eq('id', uid).single(),
+    supabase.from('fp_accounts').select('*').eq('user_id', uid).order('created_at'),
+    supabase.from('fp_goals').select('*').eq('user_id', uid).order('created_at'),
+  ]);
 
-async function registerServiceWorker() {
-  if ("serviceWorker" in navigator) {
-    try {
-      await navigator.serviceWorker.register("service-worker.js");
-    } catch (error) {
-      console.error(error);
-    }
+  state.profile = profileRes.data || {};
+  state.accounts = accountsRes.data || [];
+  state.goals = goalsRes.data || [];
+
+  // Load family if any
+  if (state.profile.family_id) {
+    const [famRes, membersRes] = await Promise.all([
+      supabase.from('fp_families').select('*').eq('id', state.profile.family_id).single(),
+      supabase.from('fp_profiles').select('id, display_name').eq('family_id', state.profile.family_id),
+    ]);
+    state.family = famRes.data;
+    state.familyMembers = membersRes.data || [];
   }
 }
 
-bindEvents();
-initReveal();
-render();
-registerServiceWorker();
+// ── RENDER ALL ────────────────────────────────
+function renderAll() {
+  renderKPIs();
+  renderProfileForm();
+  renderAccounts();
+  renderGoals();
+  renderSidebar();
+  renderFamily();
+}
+
+// ── EVENTS ────────────────────────────────────
+document.getElementById('save-profile-btn').addEventListener('click', async (e) => {
+  e.preventDefault();
+  const btn = e.target;
+  const originalText = btn.textContent;
+  btn.textContent = 'Enregistrement...';
+  btn.disabled = true;
+
+  const form = document.getElementById('profile-form');
+  const fd = new FormData(form);
+  const updates = {
+    monthly_income: Number(fd.get('monthly_income')) || 0,
+    monthly_expenses: Number(fd.get('monthly_expenses')) || 0,
+    comfort: fd.get('comfort'),
+    investment_horizon_years: Number(fd.get('investment_horizon_years')) || 0,
+    emergency_months: Number(fd.get('emergency_months')) || 0,
+    target_savings_rate: Number(fd.get('target_savings_rate')) || 0,
+    project_label: fd.get('project_label'),
+    project_type: fd.get('project_type'),
+    project_target: Number(fd.get('project_target')) || 0,
+    project_years: Number(fd.get('project_years')) || 0,
+  };
+
+  try {
+    const { error } = await supabase.from('fp_profiles').update(updates).eq('id', state.user.id);
+    if (!error) {
+      Object.assign(state.profile, updates);
+      renderAll();
+      btn.textContent = 'Enregistré !';
+      setTimeout(() => {
+        btn.textContent = originalText;
+        btn.disabled = false;
+      }, 2000);
+    } else {
+      throw error;
+    }
+  } catch (err) {
+    console.error('Erreur lors de la sauvegarde du profil:', err);
+    btn.textContent = 'Erreur';
+    setTimeout(() => {
+      btn.textContent = originalText;
+      btn.disabled = false;
+    }, 2000);
+  }
+});
+
+// ── KPIs ──────────────────────────────────────
+function renderKPIs() {
+  const { accounts, profile } = state;
+  const assets = accounts.filter(a => a.balance > 0).reduce((s, a) => s + a.balance, 0);
+  const debts = accounts.filter(a => a.balance < 0).reduce((s, a) => s + Math.abs(a.balance), 0);
+  const net = assets - debts;
+  const income = profile.monthly_income || 0;
+  const expenses = profile.monthly_expenses || 0;
+  const surplus = income - expenses;
+  const rate = income > 0 ? (surplus / income * 100) : 0;
+
+  // Next goal
+  const nextGoal = state.goals
+    .filter(g => g.current < g.target)
+    .sort((a, b) => { const pa = { critical: 0, high: 1, medium: 2, low: 3 }; return (pa[a.priority] ?? 2) - (pa[b.priority] ?? 2); })[0];
+
+  const nextGoalPct = nextGoal ? Math.round(nextGoal.current / nextGoal.target * 100) : null;
+
+  document.getElementById('kpi-networth').querySelector('.kpi-value').textContent = eur(net);
+  document.getElementById('kpi-surplus').querySelector('.kpi-value').textContent = eur(surplus);
+  document.getElementById('kpi-surplus').querySelector('.kpi-value').style.color = surplus >= 0 ? '' : 'var(--danger)';
+
+  const rateEl = document.getElementById('kpi-rate').querySelector('.kpi-value');
+  rateEl.textContent = pct(rate);
+  rateEl.style.color = rate >= 20 ? 'var(--ok)' : rate >= 10 ? 'var(--warn)' : 'var(--danger)';
+
+  if (nextGoal) {
+    document.getElementById('kpi-goal').querySelector('.kpi-value').textContent = `${nextGoalPct} %`;
+    document.getElementById('kpi-goal-label').textContent = nextGoal.label;
+  }
+
+  // Sidebar
+  document.getElementById('sidebar-net-worth').textContent = eur(net);
+  document.getElementById('sidebar-savings-rate').textContent = `Épargne : ${pct(rate)}`;
+}
+
+// ── PROFILE FORM ──────────────────────────────
+function renderProfileForm() {
+  const form = document.getElementById('profile-form');
+  const p = state.profile;
+  const fields = ['monthly_income','monthly_expenses','comfort','investment_horizon_years',
+    'emergency_months','target_savings_rate','project_label','project_type','project_target','project_years'];
+  fields.forEach(f => {
+    const el = form.elements[f];
+    if (el && p[f] != null) el.value = p[f];
+  });
+}
+
+// ── ACCOUNTS ──────────────────────────────────
+function renderAccounts() {
+  const grid = document.getElementById('accounts-grid');
+  const nonDebt = state.accounts.filter(a => a.bucket !== 'debt' && a.balance > 0);
+  const total = nonDebt.reduce((s, a) => s + a.balance, 0);
+
+  // Allocation bar
+  const bar = document.getElementById('allocation-bar');
+  const legend = document.getElementById('allocation-legend');
+  const bucketTotals = {};
+  nonDebt.forEach(a => { bucketTotals[a.bucket] = (bucketTotals[a.bucket] || 0) + a.balance; });
+
+  bar.innerHTML = Object.entries(bucketTotals).map(([b, v]) =>
+    `<div class="alloc-segment ${b}" style="width:${total > 0 ? (v/total*100).toFixed(1) : 0}%"></div>`
+  ).join('');
+
+  legend.innerHTML = Object.entries(bucketTotals).map(([b, v]) =>
+    `<span class="legend-item"><span class="legend-dot" style="background:var(--${b === 'savings' ? 'cash' : b})"></span>${bucketLabels[b] || b} ${pct(total > 0 ? v/total*100 : 0)}</span>`
+  ).join('');
+
+  if (!state.accounts.length) {
+    grid.innerHTML = `<div class="empty-state">Aucun compte renseigné. Cliquez sur <strong>+ Ajouter</strong> pour commencer.</div>`;
+    return;
+  }
+
+  grid.innerHTML = state.accounts.map(a => `
+    <div class="account-card bucket-${a.bucket}" data-id="${a.id}">
+      <div class="account-head">
+        <span class="account-label">${a.label}</span>
+        ${a.wrapper ? `<span class="account-wrapper">${a.wrapper}</span>` : ''}
+      </div>
+      <div class="account-balance ${a.balance < 0 ? 'negative' : ''}">${eur(a.balance)}</div>
+      <div class="account-meta">
+        <span class="account-type-badge">${bucketLabels[a.bucket] || a.bucket}</span>
+        ${a.rate ? `<span class="account-rate">${a.rate} %</span>` : ''}
+      </div>
+    </div>
+  `).join('');
+
+  grid.querySelectorAll('.account-card').forEach(card => {
+    card.addEventListener('click', () => openAccountDialog(card.dataset.id));
+  });
+}
+
+// Account dialog
+document.getElementById('add-account-btn').addEventListener('click', () => openAccountDialog(null));
+
+function openAccountDialog(id) {
+  const dialog = document.getElementById('account-dialog');
+  const form = document.getElementById('account-form');
+  const deleteBtn = document.getElementById('delete-account-btn');
+  form.reset();
+  form.elements.id.value = '';
+  document.getElementById('account-dialog-title').textContent = id ? 'Modifier le compte' : 'Nouveau compte';
+  deleteBtn.hidden = !id;
+  if (id) {
+    const acc = state.accounts.find(a => a.id === id);
+    if (acc) {
+      form.elements.id.value = acc.id;
+      form.elements.label.value = acc.label;
+      form.elements.bucket.value = acc.bucket;
+      form.elements.balance.value = acc.balance;
+      form.elements.rate.value = acc.rate || '';
+      form.elements.wrapper.value = acc.wrapper || '';
+    }
+  }
+  dialog.showModal();
+}
+
+document.getElementById('account-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const id = fd.get('id');
+  const row = {
+    user_id: state.user.id,
+    label: fd.get('label'),
+    bucket: fd.get('bucket'),
+    balance: +fd.get('balance'),
+    rate: +fd.get('rate') || 0,
+    wrapper: fd.get('wrapper'),
+    updated_at: new Date().toISOString(),
+  };
+  if (id) {
+    await supabase.from('fp_accounts').update(row).eq('id', id).eq('user_id', state.user.id);
+    state.accounts = state.accounts.map(a => a.id === id ? { ...a, ...row, id } : a);
+  } else {
+    const { data } = await supabase.from('fp_accounts').insert(row).select().single();
+    if (data) state.accounts.push(data);
+  }
+  document.getElementById('account-dialog').close();
+  renderAccounts();
+  renderKPIs();
+});
+
+document.getElementById('delete-account-btn').addEventListener('click', async () => {
+  const id = document.getElementById('account-form').elements.id.value;
+  if (!id) return;
+  await supabase.from('fp_accounts').delete().eq('id', id).eq('user_id', state.user.id);
+  state.accounts = state.accounts.filter(a => a.id !== id);
+  document.getElementById('account-dialog').close();
+  renderAccounts();
+  renderKPIs();
+});
+
+// ── GOALS ─────────────────────────────────────
+function renderGoals() {
+  const grid = document.getElementById('goals-grid');
+  if (!state.goals.length) {
+    grid.innerHTML = `<div class="empty-state">Aucun objectif défini. Cliquez sur <strong>+ Ajouter</strong> pour commencer.</div>`;
+    return;
+  }
+  grid.innerHTML = state.goals.map(g => {
+    const pctVal = g.target > 0 ? Math.min(100, g.current / g.target * 100) : 0;
+    const remaining = g.target - g.current;
+    const monthsLeft = g.monthly_contribution > 0 ? Math.ceil(remaining / g.monthly_contribution) : null;
+    return `
+      <div class="goal-card" data-id="${g.id}">
+        <div class="goal-head">
+          <span class="goal-label">${g.label}</span>
+          <span class="priority-badge priority-${g.priority}">${priorityLabels[g.priority]}</span>
+        </div>
+        <div class="goal-amounts">
+          <span class="goal-current">${eur(g.current)}</span>
+          <span class="goal-target">/ ${eur(g.target)}</span>
+        </div>
+        <div class="goal-track"><div class="goal-fill" style="width:${pctVal.toFixed(1)}%"></div></div>
+        <div class="goal-footer">
+          <span>${pctVal.toFixed(0)} % atteint</span>
+          <span>${monthsLeft ? `${monthsLeft} mois restants` : g.horizon_months + ' mois'}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  grid.querySelectorAll('.goal-card').forEach(card => {
+    card.addEventListener('click', () => openGoalDialog(card.dataset.id));
+  });
+}
+
+document.getElementById('add-goal-btn').addEventListener('click', () => openGoalDialog(null));
+
+function openGoalDialog(id) {
+  const dialog = document.getElementById('goal-dialog');
+  const form = document.getElementById('goal-form');
+  const deleteBtn = document.getElementById('delete-goal-btn');
+  form.reset();
+  form.elements.id.value = '';
+  document.getElementById('goal-dialog-title').textContent = id ? 'Modifier l\'objectif' : 'Nouvel objectif';
+  deleteBtn.hidden = !id;
+  if (id) {
+    const g = state.goals.find(g => g.id === id);
+    if (g) {
+      form.elements.id.value = g.id;
+      form.elements.label.value = g.label;
+      form.elements.target.value = g.target;
+      form.elements.current.value = g.current;
+      form.elements.monthly_contribution.value = g.monthly_contribution;
+      form.elements.horizon_months.value = g.horizon_months;
+      form.elements.priority.value = g.priority;
+    }
+  }
+  dialog.showModal();
+}
+
+document.getElementById('goal-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const id = fd.get('id');
+  const row = {
+    user_id: state.user.id,
+    label: fd.get('label'),
+    target: +fd.get('target'),
+    current: +fd.get('current'),
+    monthly_contribution: +fd.get('monthly_contribution'),
+    horizon_months: +fd.get('horizon_months'),
+    priority: fd.get('priority'),
+  };
+  if (id) {
+    await supabase.from('fp_goals').update(row).eq('id', id).eq('user_id', state.user.id);
+    state.goals = state.goals.map(g => g.id === id ? { ...g, ...row, id } : g);
+  } else {
+    const { data } = await supabase.from('fp_goals').insert(row).select().single();
+    if (data) state.goals.push(data);
+  }
+  document.getElementById('goal-dialog').close();
+  renderGoals();
+  renderKPIs();
+});
+
+document.getElementById('delete-goal-btn').addEventListener('click', async () => {
+  const id = document.getElementById('goal-form').elements.id.value;
+  if (!id) return;
+  await supabase.from('fp_goals').delete().eq('id', id).eq('user_id', state.user.id);
+  state.goals = state.goals.filter(g => g.id !== id);
+  document.getElementById('goal-dialog').close();
+  renderGoals();
+  renderKPIs();
+});
+
+// ── AI ADVICE ─────────────────────────────────
+document.getElementById('get-advice-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('get-advice-btn');
+  const content = document.getElementById('advice-content');
+  btn.disabled = true;
+  content.innerHTML = `<div class="advice-loading"><div class="spinner"></div>Claude analyse votre situation…</div>`;
+
+  const { data, error } = await supabase.functions.invoke('finance-advisor', {
+    body: {
+      profile: state.profile,
+      accounts: state.accounts,
+      goals: state.goals,
+    },
+  });
+
+  btn.disabled = false;
+  if (error || !data?.advice) {
+    content.innerHTML = `<div class="advice-placeholder" style="color:var(--danger)">Erreur : ${error?.message || 'Impossible de joindre le conseiller IA. Vérifiez que la clé API Anthropic est configurée dans Supabase.'}</div>`;
+    return;
+  }
+
+  content.innerHTML = data.advice;
+  const now = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  document.getElementById('advice-timestamp').textContent = `Mis à jour à ${now}`;
+});
+
+// ── MARKET DATA ───────────────────────────────
+async function fetchMarketData() {
+  const ticker = document.getElementById('market-ticker');
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/finance-market`, {
+      headers: { apikey: SUPABASE_ANON },
+    });
+    const data = await res.json();
+    if (!Array.isArray(data)) return;
+
+    ticker.innerHTML = data.filter(d => !d.error).map((d, i) => `
+      ${i > 0 ? '<span class="ticker-sep">·</span>' : ''}
+      <div class="ticker-item">
+        <span class="ticker-label">${d.label}</span>
+        <span class="ticker-price">${formatMarketPrice(d)}</span>
+        <span class="ticker-change ${d.change >= 0 ? 'up' : 'down'}">${d.change >= 0 ? '+' : ''}${(+d.change).toFixed(2)} %</span>
+      </div>
+    `).join('');
+  } catch {
+    ticker.innerHTML = `<span class="ticker-loading">Marchés indisponibles</span>`;
+  }
+}
+
+function formatMarketPrice(d) {
+  if (d.id === 'EURUSD') return `${(+d.price).toFixed(4)}`;
+  if (d.id === 'BTC') return eur(d.price);
+  return new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(d.price);
+}
+
+// ── FAMILY ────────────────────────────────────
+function renderSidebar() {
+  const fam = document.getElementById('sidebar-family');
+  fam.hidden = false;
+  const list = document.getElementById('family-members-list');
+  if (state.familyMembers.length) {
+    list.innerHTML = state.familyMembers.map(m =>
+      `<div class="family-member-row"><span class="member-dot"></span>${m.display_name || 'Membre'}</div>`
+    ).join('');
+  } else {
+    list.innerHTML = `<p style="color:var(--muted);font-size:.82rem;margin:0 0 .6rem">Pas encore de famille créée.</p>`;
+  }
+}
+
+function renderFamily() {
+  const switcher = document.getElementById('family-switcher');
+  switcher.hidden = !state.family;
+}
+
+document.getElementById('create-family-btn').addEventListener('click', async () => {
+  const dialog = document.getElementById('family-dialog');
+  document.getElementById('family-dialog-title').textContent = 'Créer une famille';
+  const name = prompt('Nom de votre famille (ex: Famille Saez)');
+  if (!name) return;
+  const { data, error } = await supabase.from('fp_families').insert({ name, created_by: state.user.id }).select().single();
+  if (error || !data) { alert('Erreur : ' + (error?.message || 'inconnu')); return; }
+  await supabase.from('fp_profiles').update({ family_id: data.id }).eq('id', state.user.id);
+  state.family = data;
+  state.profile.family_id = data.id;
+  state.familyMembers = [{ id: state.user.id, display_name: state.profile.display_name }];
+  renderSidebar();
+  renderFamily();
+
+  // Show invite code
+  document.getElementById('family-dialog-title').textContent = 'Famille créée !';
+  document.getElementById('family-dialog-content').innerHTML = `
+    <p style="color:var(--text-soft);margin:0 0 1rem">Partagez ce code à vos proches pour qu'ils rejoignent votre espace famille :</p>
+    <div class="family-code-display">
+      <div class="family-code">${data.invite_code}</div>
+      <div class="family-code-hint">À saisir lors de la création de compte</div>
+    </div>
+    <div style="margin-top:1rem;display:flex;justify-content:flex-end">
+      <button class="primary-button" onclick="document.getElementById('family-dialog').close()">Fermer</button>
+    </div>
+  `;
+  dialog.showModal();
+});
+
+document.getElementById('join-family-btn').addEventListener('click', () => {
+  const dialog = document.getElementById('family-dialog');
+  document.getElementById('family-dialog-title').textContent = 'Rejoindre une famille';
+  document.getElementById('family-dialog-content').innerHTML = `
+    <div class="join-form">
+      <p style="color:var(--text-soft);margin:0">Entrez le code famille partagé par un proche :</p>
+      <input id="join-code-input" type="text" maxlength="8" placeholder="XXXXXXXX">
+      <div style="display:flex;justify-content:flex-end;gap:.6rem">
+        <button class="ghost-button" onclick="document.getElementById('family-dialog').close()">Annuler</button>
+        <button class="primary-button" id="confirm-join-btn">Rejoindre</button>
+      </div>
+    </div>
+  `;
+  dialog.showModal();
+  document.getElementById('confirm-join-btn').addEventListener('click', async () => {
+    const code = document.getElementById('join-code-input').value.trim().toUpperCase();
+    if (!code) return;
+    await joinFamilyByCode(code, state.user.id);
+    dialog.close();
+  });
+});
+
+async function joinFamilyByCode(code, userId) {
+  const { data: fam } = await supabase.from('fp_families').select('id, name').eq('invite_code', code).single();
+  if (!fam) { alert('Code famille invalide.'); return; }
+  await supabase.from('fp_profiles').update({ family_id: fam.id }).eq('id', userId);
+  if (state.user?.id === userId) {
+    state.family = fam;
+    state.profile.family_id = fam.id;
+    await loadAll();
+    renderSidebar();
+    renderFamily();
+  }
+}
+
+// ── DIALOG CLOSE ─────────────────────────────
+document.querySelectorAll('[data-close]').forEach(btn => {
+  btn.addEventListener('click', () => document.getElementById(btn.dataset.close).close());
+});
+
+// ── HELPERS ───────────────────────────────────
+function flashBtn(btn, text) {
+  const orig = btn.textContent;
+  btn.textContent = text;
+  setTimeout(() => { btn.textContent = orig; }, 1800);
+}
